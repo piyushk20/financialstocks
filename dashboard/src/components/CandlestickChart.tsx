@@ -18,6 +18,7 @@ interface CandlestickChartProps {
   sma20?: (number | null)[];
   sma50?: (number | null)[];
   sma200?: (number | null)[];
+  techDates?: string[];
   loading: boolean;
 }
 
@@ -26,6 +27,7 @@ export function CandlestickChart({
   sma20,
   sma50,
   sma200,
+  techDates,
   loading,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,25 +79,39 @@ export function CandlestickChart({
     candleSeries.setData(candles);
 
     // SMA overlays (v5 API)
-    const addSMA = (values: (number | null)[], color: string) => {
+    const addSMA = (values: (number | null)[], dates: string[], color: string) => {
+      if (!values || !dates || values.length === 0) return;
+      
       const series = chart.addSeries(LineSeries, {
         color,
-        lineWidth: 1,
+        lineWidth: 2,
         priceLineVisible: false,
+        lastValueVisible: true,
       });
+
+      // Map technical dates to chart data via a lookup
+      // candles[i].time is the source of truth for the x-axis
+      const candleTimes = new Set(candles.map(c => c.time));
+      
       const lineData = values
-        .map((v, i) =>
-          v != null && candles[i]
-            ? { time: candles[i].time, value: v }
-            : null
-        )
-        .filter(Boolean) as { time: `${number}-${number}-${number}`; value: number }[];
+        .map((v, i) => {
+          const date = dates[i];
+          if (v == null || !date) return null;
+          const formattedDate = date as `${number}-${number}-${number}`;
+          if (!candleTimes.has(formattedDate)) return null;
+          return { time: formattedDate, value: v };
+        })
+        .filter((item): item is { time: `${number}-${number}-${number}`; value: number } => 
+          item !== null
+        );
+      
+      lineData.sort((a, b) => (a.time > b.time ? 1 : -1));
       series.setData(lineData);
     };
 
-    if (sma20) addSMA(sma20, "#60a5fa");
-    if (sma50) addSMA(sma50, "#f59e0b");
-    if (sma200) addSMA(sma200, "#a78bfa");
+    if (sma20 && techDates) addSMA(sma20, techDates, "#60a5fa");
+    if (sma50 && techDates) addSMA(sma50, techDates, "#f59e0b");
+    if (sma200 && techDates) addSMA(sma200, techDates, "#a78bfa");
 
     // Volume histogram (v5 API)
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -127,7 +143,7 @@ export function CandlestickChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, sma20, sma50, sma200]);
+  }, [data, sma20, sma50, sma200, techDates]);
 
   if (loading) {
     return <Skeleton className="w-full h-[340px] rounded-2xl bg-zinc-800" />;
@@ -137,20 +153,29 @@ export function CandlestickChart({
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-center gap-4 mb-3 text-[11px] font-medium">
         <span className="text-zinc-400">SMA:</span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-0.5 bg-blue-400 inline-block rounded" />
-          20d
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 bg-[#60a5fa] inline-block rounded" />
+          <span className="text-zinc-300">20d:</span>
+          <span className="text-blue-400 font-mono">
+            {sma20?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+          </span>
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-0.5 bg-amber-400 inline-block rounded" />
-          50d
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 bg-[#f59e0b] inline-block rounded" />
+          <span className="text-zinc-300">50d:</span>
+          <span className="text-amber-400 font-mono">
+            {sma50?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+          </span>
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-0.5 bg-violet-400 inline-block rounded" />
-          200d
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 bg-[#a78bfa] inline-block rounded" />
+          <span className="text-zinc-300">200d:</span>
+          <span className="text-violet-400 font-mono">
+            {sma200?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+          </span>
         </span>
       </div>
-      <div ref={containerRef} className="w-full" />
+      <div ref={containerRef} className="w-full overflow-hidden" />
     </div>
   );
 }

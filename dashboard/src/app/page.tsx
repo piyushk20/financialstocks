@@ -21,6 +21,7 @@ const POLL = Number(process.env.NEXT_PUBLIC_POLL_INTERVAL_MS ?? 30000);
 
 export default function Dashboard() {
   const [symbol, setSymbol] = useState("RELIANCE.NS");
+  const [finPeriod, setFinPeriod] = useState<"annual" | "quarterly">("annual");
   const [heatmapData, setHeatmapData] = useState<{ symbol: string; change: number }[]>([]);
   const [mounted, setMounted] = useState(false);
 
@@ -37,7 +38,7 @@ export default function Dashboard() {
 
   // Financials — fetched once per symbol change
   const { data: finData, isLoading: finLoading } = useSWR(
-    `/api/financials/${encodeURIComponent(symbol)}?period=annual`,
+    `/api/financials/${encodeURIComponent(symbol)}?period=${finPeriod}`,
     fetcher
   );
 
@@ -77,6 +78,8 @@ export default function Dashboard() {
       }
     }
     fetchHeatmap();
+    const interval = setInterval(fetchHeatmap, POLL);
+    return () => clearInterval(interval);
   }, [mounted]);
 
   return (
@@ -148,6 +151,7 @@ export default function Dashboard() {
                   sma20={techData?.sma20}
                   sma50={techData?.sma50}
                   sma200={techData?.sma200}
+                  techDates={techData?.dates}
                   loading={stockLoading}
                 />
               </div>
@@ -190,6 +194,8 @@ export default function Dashboard() {
                   balance={finData?.balance ?? []}
                   cashflow={finData?.cashflow ?? []}
                   loading={finLoading}
+                  period={finPeriod}
+                  onPeriodChange={setFinPeriod}
                 />
               </TabsContent>
 

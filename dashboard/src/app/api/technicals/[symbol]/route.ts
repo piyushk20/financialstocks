@@ -60,7 +60,7 @@ export async function GET(
   try {
     const res = await fetch(
       `${SIDECAR}/history?ticker=${encodeURIComponent(symbol)}&period=2y&interval=1d`,
-      { next: { revalidate: 300 } }
+      { next: { revalidate: 30 } }
     );
 
     if (!res.ok) {

@@ -96,7 +96,7 @@ def _get_history(ticker_sym: str, period: str, interval: str) -> list:
     return rows
 
 
-def _get_financials(ticker_sym: str) -> dict:
+def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
     t = yf.Ticker(ticker_sym)
 
     def stmt_to_list(df):
@@ -135,9 +135,14 @@ def _get_financials(ticker_sym: str) -> dict:
             rows.append(row)
         return rows
 
-    income = stmt_to_list(t.income_stmt)
-    balance = stmt_to_list(t.balance_sheet)
-    cashflow = stmt_to_list(t.cashflow)
+    if period == "quarterly":
+        income = stmt_to_list(t.quarterly_income_stmt)
+        balance = stmt_to_list(t.quarterly_balance_sheet)
+        cashflow = stmt_to_list(t.quarterly_cashflow)
+    else:
+        income = stmt_to_list(t.income_stmt)
+        balance = stmt_to_list(t.balance_sheet)
+        cashflow = stmt_to_list(t.cashflow)
     return {"income": income, "balance": balance, "cashflow": cashflow}
 
 
@@ -195,11 +200,13 @@ async def history(
 
 
 @app.get("/financials")
-async def financials(ticker: str = Query(...)):
+async def financials(ticker: str = Query(...), period: str = Query("annual")):
     _validate_ticker(ticker)
+    if period not in ("annual", "quarterly"):
+        raise HTTPException(status_code=400, detail="period must be 'annual' or 'quarterly'")
     loop = asyncio.get_event_loop()
     try:
-        data = await loop.run_in_executor(executor, _get_financials, ticker)
+        data = await loop.run_in_executor(executor, _get_financials, ticker, period)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

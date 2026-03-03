@@ -20,7 +20,9 @@ export async function POST(req: Request) {
     const results: Record<string, unknown> = {};
     const promises = symbols.map(async (sym) => {
       try {
-        const res = await fetch(`${SIDECAR_URL}/snapshot?ticker=${encodeURIComponent(sym)}`);
+        const res = await fetch(`${SIDECAR_URL}/snapshot?ticker=${encodeURIComponent(sym)}`, {
+          next: { revalidate: 30 }
+        });
         if (res.ok) {
           const data = await res.json();
           results[sym] = data.snapshot || { changePercent: 0 };

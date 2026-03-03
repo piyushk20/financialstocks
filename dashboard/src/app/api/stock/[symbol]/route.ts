@@ -18,8 +18,8 @@ export async function GET(
         next: { revalidate: 30 },
       }),
       fetch(
-        `${SIDECAR}/history?ticker=${encodeURIComponent(symbol)}&period=1y&interval=1d`,
-        { next: { revalidate: 300 } }
+        `${SIDECAR}/history?ticker=${encodeURIComponent(symbol)}&period=2y&interval=1d`,
+        { next: { revalidate: 30 } }
       ),
     ]);
 

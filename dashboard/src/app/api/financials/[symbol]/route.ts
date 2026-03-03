@@ -15,8 +15,8 @@ export async function GET(
 
   try {
     const res = await fetch(
-      `${SIDECAR}/financials?ticker=${encodeURIComponent(symbol)}`,
-      { next: { revalidate: 3600 } }
+      `${SIDECAR}/financials?ticker=${encodeURIComponent(symbol)}&period=${encodeURIComponent(period)}`,
+      { next: { revalidate: 30 } }
     );
 
     if (!res.ok) {

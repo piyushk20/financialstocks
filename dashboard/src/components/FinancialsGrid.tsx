@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -13,6 +12,8 @@ interface FinancialsGridProps {
   balance: BalanceRow[];
   cashflow: CFRow[];
   loading: boolean;
+  period: "annual" | "quarterly";
+  onPeriodChange: (p: "annual" | "quarterly") => void;
 }
 
 function crore(n: number | null): string {
@@ -126,16 +127,14 @@ function CFTable({ rows }: { rows: CFRow[] }) {
   );
 }
 
-export function FinancialsGrid({ income, balance, cashflow, loading }: FinancialsGridProps) {
-  const [period, setPeriod] = useState<"annual" | "quarterly">("annual");
-
+export function FinancialsGrid({ income, balance, cashflow, loading, period, onPeriodChange }: FinancialsGridProps) {
   return (
     <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Financials</h2>
         <div className="flex rounded-lg overflow-hidden border border-zinc-700">
           {(["annual", "quarterly"] as const).map((p) => (
-            <button key={p} onClick={() => setPeriod(p)}
+            <button key={p} onClick={() => onPeriodChange(p)}
               className={`px-3 py-1 text-xs font-medium transition-colors ${period === p ? "bg-violet-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
               {p === "annual" ? "Annual" : "Quarterly"}
             </button>
