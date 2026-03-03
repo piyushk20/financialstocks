@@ -86,7 +86,15 @@ export function AIAnalysisTab({
   // Simple markdown → HTML
   function renderMarkdown(text: string): string {
     if (!text) return "";
-    return text
+    // Basic HTML escaping to prevent XSS
+    const escapedText = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+    return escapedText
       .replace(/^[\s]*### (.+)$/gm, '<h3 class="text-violet-300 font-semibold text-sm mt-4 mb-2">$1</h3>')
       .replace(/^[\s]*## (.+)$/gm, '<h2 class="text-zinc-100 font-bold mt-6 mb-3">$1</h2>')
       .replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
@@ -104,7 +112,7 @@ export function AIAnalysisTab({
             AI Analysis
           </h2>
           <span className="text-[10px] text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
-            Gemini 1.5 Flash
+            Gemini 2.0 Flash
           </span>
         </div>
         <Button

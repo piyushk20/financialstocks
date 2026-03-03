@@ -161,8 +161,16 @@ def _get_news(ticker_sym: str) -> list:
     return result
 
 
+import re
+
+def _validate_ticker(ticker: str):
+    if not ticker or not re.match(r"^[A-Z0-9.\-_]{1,20}$", ticker, re.I):
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+
+
 @app.get("/snapshot")
 async def snapshot(ticker: str = Query(...)):
+    _validate_ticker(ticker)
     loop = asyncio.get_event_loop()
     try:
         data = await loop.run_in_executor(executor, _get_snapshot, ticker)
@@ -177,6 +185,7 @@ async def history(
     period: str = Query("1y"),
     interval: str = Query("1d"),
 ):
+    _validate_ticker(ticker)
     loop = asyncio.get_event_loop()
     try:
         data = await loop.run_in_executor(executor, _get_history, ticker, period, interval)
@@ -187,6 +196,7 @@ async def history(
 
 @app.get("/financials")
 async def financials(ticker: str = Query(...)):
+    _validate_ticker(ticker)
     loop = asyncio.get_event_loop()
     try:
         data = await loop.run_in_executor(executor, _get_financials, ticker)
@@ -197,6 +207,7 @@ async def financials(ticker: str = Query(...)):
 
 @app.get("/news")
 async def news(ticker: str = Query(...)):
+    _validate_ticker(ticker)
     loop = asyncio.get_event_loop()
     try:
         data = await loop.run_in_executor(executor, _get_news, ticker)
