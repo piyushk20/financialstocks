@@ -83,7 +83,7 @@ export default function Dashboard() {
   }, [mounted]);
 
   return (
-    <div className="relative min-h-screen z-10">
+    <div className="relative min-h-screen z-10" suppressHydrationWarning>
       {/* Top nav bar */}
       <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-[#0a0a0f]/90 backdrop-blur-xl px-6 py-3">
         <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-6">
