@@ -1,0 +1,57 @@
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+*.env
+auth.json
+credentials.json
+token.json
+
+# Local keys/logs
+dev.log
+sidecar.log
+dump_keys.json
+ruff_results.txt
+eslint_results.txt
+git_diff.txt
+tsconfig.tsbuildinfo
+test-ai.js
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS/IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+.tmp/
+tmp/
+CORTEX_BROWSER_RECORDING_*
+*.webp
