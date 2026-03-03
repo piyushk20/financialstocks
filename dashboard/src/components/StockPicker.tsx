@@ -115,7 +115,7 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
         >
           All
         </button>
-        {SECTORS.slice(0, 12).map((s) => (
+        {SECTORS.map((s) => (
           <button
             key={s}
             onClick={() => setSector(sector === s ? null : s)}

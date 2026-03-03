@@ -182,6 +182,12 @@ export const NSE200: StockEntry[] = [
   { symbol: "MAZDOCK.NS", name: "Mazagon Dock Shipbuilders", sector: "Defence" },
   { symbol: "GRSE.NS", name: "Garden Reach Shipbuilders", sector: "Defence" },
   { symbol: "COCHINSHIP.NS", name: "Cochin Shipyard Ltd", sector: "Defence" },
+  // Market Indexes
+  { symbol: "^NSEI", name: "Nifty 50", sector: "Index" },
+  { symbol: "^NSEBANK", name: "Bank Nifty", sector: "Index" },
+  { symbol: "^CNXPHARMA", name: "Nifty Pharma", sector: "Index" },
+  { symbol: "^CNXIT", name: "Nifty IT", sector: "Index" },
+  { symbol: "NIFTY_DEFENCE.NS", name: "Nifty Defence", sector: "Index" },
 ];
 
 export const SECTORS = [...new Set(NSE200.map((s) => s.sector))].sort();

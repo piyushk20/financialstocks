@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TechnicalPanelProps {
   dates: string[];
@@ -23,6 +24,9 @@ interface TechnicalPanelProps {
   macd: (number | null)[];
   macdSignal: (number | null)[];
   macdHist: (number | null)[];
+  ema20?: number[];
+  ema50?: number[];
+  ema200?: number[];
   loading: boolean;
 }
 
@@ -33,7 +37,17 @@ function rsiSignal(val: number | null) {
   return { label: "Neutral", class: "bg-zinc-700/60 text-zinc-400 border-zinc-600/20" };
 }
 
-export function TechnicalPanel({ dates, rsi, macd, macdSignal, macdHist, loading }: TechnicalPanelProps) {
+export function TechnicalPanel({
+  dates,
+  rsi,
+  macd,
+  macdSignal,
+  macdHist,
+  ema20,
+  ema50,
+  ema200,
+  loading,
+}: TechnicalPanelProps) {
   if (loading) {
     return (
       <div className="space-y-4">
@@ -65,8 +79,28 @@ export function TechnicalPanel({ dates, rsi, macd, macdSignal, macdHist, loading
   const latestSignal = macdSignal.filter(Boolean).at(-1) as number | null;
   const macdBull = latestMacd != null && latestSignal != null && latestMacd > latestSignal;
 
+  const currentEma20 = ema20?.filter((v) => !isNaN(v)).at(-1);
+  const currentEma50 = ema50?.filter((v) => !isNaN(v)).at(-1);
+  const currentEma200 = ema200?.filter((v) => !isNaN(v)).at(-1);
+
   return (
     <div className="space-y-4">
+      {/* EMA Grid */}
+      <div className="glass-card rounded-2xl p-4 grid grid-cols-3 gap-3">
+        {[
+          { label: "EMA 20", value: currentEma20, color: "text-blue-400" },
+          { label: "EMA 50", value: currentEma50, color: "text-amber-400" },
+          { label: "EMA 200", value: currentEma200, color: "text-violet-400" },
+        ].map((item) => (
+          <div key={item.label} className="flex flex-col items-center justify-center p-2 rounded-xl bg-zinc-800/40 border border-zinc-700/50">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-tighter mb-1">{item.label}</span>
+            <span className={cn("text-xs font-mono font-bold", item.color)}>
+              {item.value ? item.value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+
       {/* RSI */}
       <div className="glass-card rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">

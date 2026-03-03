@@ -1,18 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
 /* ── Design Tokens ── */
 :root {
-  --bg-base: #0a0a0f;
-  --bg-surface: #111118;
-  --bg-elevated: #1a1a24;
-  --accent: #7c3aed;
-  --accent-hover: #8b5cf6;
-  --up: #22c55e;
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #334155;
+  --accent: #f59e0b;
+  --accent-secondary: #8b5cf6;
+  --up: #10b981;
   --down: #ef4444;
-  --glass-bg: rgba(17, 17, 24, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --font-inter: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --glass-bg: rgba(30, 41, 59, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --font-heading: "Fira Code", monospace;
+  --font-body: "Fira Sans", sans-serif;
 }
 
 /* ── Base Reset ── */

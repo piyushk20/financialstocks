@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   const { symbol } = await params;
-  if (!/^[A-Z0-9.\-_]{1,20}$/i.test(symbol)) {
+  if (!/^[A-Z0-9.\-_^]{1,20}$/i.test(symbol)) {
     return NextResponse.json({ error: "Invalid symbol format" }, { status: 400 });
   }
   const url = new URL(req.url);

@@ -25,6 +25,7 @@ export function AIAnalysisTab({
   const [hasRun, setHasRun] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [completion, setCompletion] = useState("");
+  const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -56,7 +57,14 @@ export function AIAnalysisTab({
       const res = await fetch("/api/ai-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshot, income, balance, cashflow, technicals }),
+        body: JSON.stringify({
+          snapshot,
+          income,
+          balance,
+          cashflow,
+          technicals,
+          query: query.trim() || undefined,
+        }),
         signal: abortRef.current.signal,
       });
 
@@ -115,24 +123,37 @@ export function AIAnalysisTab({
             Gemini 2.0 Flash
           </span>
         </div>
-        <Button
-          size="sm"
-          onClick={handleAnalyze}
-          disabled={isLoading}
-          className="bg-violet-600 hover:bg-violet-500 text-white gap-2 text-xs"
-        >
-          {isLoading ? (
-            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="h-3.5 w-3.5" />
-          )}
-          {isLoading
-            ? "Analyzing…"
-            : hasRun
-            ? "Re-Analyze"
-            : `Analyze ${symbol.replace(".NS", "")}`}
-        </Button>
       </div>
+
+      <div className="mb-6 space-y-2">
+        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">
+          Custom Query (Optional)
+        </label>
+        <textarea
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Ask something specific (e.g. 'How is the debt level?' or 'Explain the MACD trend')..."
+          className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-violet-500/50 rounded-xl p-3 text-sm text-zinc-300 placeholder:text-zinc-600 outline-none transition-all resize-none min-h-[80px]"
+        />
+      </div>
+
+      <Button
+        size="lg"
+        onClick={handleAnalyze}
+        disabled={isLoading}
+        className="w-full bg-violet-600 hover:bg-violet-500 text-white gap-2 text-sm font-semibold py-6 rounded-xl shadow-lg shadow-violet-900/20 mb-8"
+      >
+        {isLoading ? (
+          <RefreshCw className="h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="h-4 w-4" />
+        )}
+        {isLoading
+          ? "Quant AI is thinking..."
+          : hasRun
+          ? "Run New Analysis"
+          : `Generate ${symbol.replace(".NS", "")} Intelligence Report`}
+      </Button>
 
       {!hasRun && !isLoading && (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3">

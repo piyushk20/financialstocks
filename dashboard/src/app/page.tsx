@@ -11,13 +11,22 @@ import { FinancialsGrid } from "@/components/FinancialsGrid";
 import { NewsFeed } from "@/components/NewsFeed";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { AIAnalysisTab } from "@/components/AIAnalysisTab";
+import { Heatmap } from "@/components/Heatmap";
+import { NSE200 } from "@/data/nse200";
 import { BarChart3 } from "lucide-react";
+import { useEffect } from "react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 const POLL = Number(process.env.NEXT_PUBLIC_POLL_INTERVAL_MS ?? 30000);
 
 export default function Dashboard() {
   const [symbol, setSymbol] = useState("RELIANCE.NS");
+  const [heatmapData, setHeatmapData] = useState<{ symbol: string; change: number }[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Price + history — polls every POLL ms
   const { data: stockData, isLoading: stockLoading } = useSWR(
@@ -44,6 +53,31 @@ export default function Dashboard() {
     `/api/technicals/${encodeURIComponent(symbol)}`,
     fetcher
   );
+
+  // Fetch heatmap data on mount
+  useEffect(() => {
+    if (!mounted) return;
+    async function fetchHeatmap() {
+      try {
+        const nifty50 = NSE200.slice(0, 50).map(s => s.symbol);
+        const res = await fetch("/api/snapshot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: nifty50 }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHeatmapData(Object.entries(data).map(([sym, snap]) => ({
+            symbol: sym,
+            change: (snap as { change_percent: number }).change_percent || 0
+          })));
+        }
+      } catch (e) {
+        console.error("Heatmap fetch failed", e);
+      }
+    }
+    fetchHeatmap();
+  }, [mounted]);
 
   return (
     <div className="relative min-h-screen z-10">
@@ -78,7 +112,18 @@ export default function Dashboard() {
       </header>
 
       {/* Main grid */}
-      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+        {/* Heatmap Section */}
+        {mounted ? (
+          heatmapData.length > 0 ? (
+            <Heatmap data={heatmapData} onSelect={setSymbol} />
+          ) : (
+            <div className="glass-card rounded-2xl p-6 h-32 animate-pulse flex items-center justify-center text-zinc-500 font-medium lowercase tracking-tighter">
+              Synchronizing Nifty 50 Heatmap...
+            </div>
+          )
+        ) : null}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={symbol}
@@ -113,6 +158,9 @@ export default function Dashboard() {
                   macd={techData?.macd ?? []}
                   macdSignal={techData?.macdSignal ?? []}
                   macdHist={techData?.macdHist ?? []}
+                  ema20={techData?.ema20}
+                  ema50={techData?.ema50}
+                  ema200={techData?.ema200}
                   loading={techLoading}
                 />
               </div>

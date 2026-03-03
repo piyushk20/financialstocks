@@ -53,7 +53,7 @@ export async function GET(
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   const { symbol } = await params;
-  if (!/^[A-Z0-9.\-_]{1,20}$/i.test(symbol)) {
+  if (!/^[A-Z0-9.\-_\^]{1,20}$/i.test(symbol)) {
     return NextResponse.json({ error: "Invalid symbol format" }, { status: 400 });
   }
 
@@ -80,6 +80,10 @@ export async function GET(
     const sma20 = computeSMA(closes, 20);
     const sma50 = computeSMA(closes, 50);
     const sma200 = computeSMA(closes, 200);
+
+    const ema20 = computeEMA(closes, 20);
+    const ema50 = computeEMA(closes, 50);
+    const ema200 = computeEMA(closes, 200);
 
     const ema12 = computeEMA(closes, 12);
     const ema26 = computeEMA(closes, 26);
@@ -116,6 +120,9 @@ export async function GET(
       sma20,
       sma50,
       sma200,
+      ema20,
+      ema50,
+      ema200,
       macd: macdLine,
       macdSignal: signalArr,
       macdHist,
