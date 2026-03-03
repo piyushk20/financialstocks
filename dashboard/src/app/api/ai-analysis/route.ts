@@ -22,21 +22,12 @@ export async function POST(req: Request) {
           if (match) apiKey = match[1];
         }
       } catch (e) {
-        console.error("[AI-API] Could not read .env.local", e);
+        console.error("[AI-API] Could not read .env.local for Gemini", e);
       }
     }
 
-    if (!apiKey) {
-      console.error("[AI-API] No Gemini API key found!");
-      return new Response("No GEMINI_API_KEY found. Check .env.local", { status: 500 });
-    }
-
-    const google = createGoogleGenerativeAI({ apiKey });
-
-    // Fallback logic starts here
     let groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) {
-      // Attempt to read from .env.local if not in process.env
       try {
         const envPath = path.join(process.cwd(), '.env.local');
         if (fs.existsSync(envPath)) {
@@ -45,7 +36,7 @@ export async function POST(req: Request) {
           if (match) groqKey = match[1];
         }
       } catch (e) {
-        console.error("[AI-API] Could not read .env.local for Groq key", e);
+        console.error("[AI-API] Could not read .env.local for Groq", e);
       }
     }
 
@@ -75,17 +66,23 @@ Recent Balance: ${JSON.stringify((balance as BalanceSheet[])?.slice(0, 1))}
 Format as a crisp trader's report card. Keep it concise but data-driven.`;
 
     try {
-      console.log("[AI-API] Attempting analysis with Gemini...");
-      const result = await streamText({
-        model: google("gemini-1.5-flash"), // Using 1.5-flash as it's often more available, but user had 2.0-flash
-        prompt,
-      });
-      return result.toTextStreamResponse();
+      if (apiKey) {
+        console.log("[AI-API] Attempting analysis with Gemini...");
+        const google = createGoogleGenerativeAI({ apiKey });
+        const result = await streamText({
+          model: google("gemini-1.5-flash"),
+          prompt,
+        });
+        return result.toTextStreamResponse();
+      } else {
+        console.warn("[AI-API] Gemini key missing, attempting Groq...");
+        throw new Error("Gemini key missing");
+      }
     } catch (geminiErr: any) {
-      console.error("[AI-API] Gemini failed, attempting Groq fallback...", geminiErr.message);
+      console.error("[AI-API] Gemini unavailable/failed, attempting Groq fallback...", geminiErr.message);
       
       if (!groqKey) {
-        throw new Error("Gemini failed and no Groq API key available for fallback.");
+        return new Response("Both Gemini and Groq API keys are missing or failed. Check .env.local", { status: 500 });
       }
 
       const { createOpenAI } = await import("@ai-sdk/openai");
@@ -95,7 +92,7 @@ Format as a crisp trader's report card. Keep it concise but data-driven.`;
       });
 
       const result = await streamText({
-        model: groq("llama-3.3-70b-versatile"), // High performance fallback
+        model: groq("llama-3.3-70b-versatile"),
         prompt,
       });
       return result.toTextStreamResponse();

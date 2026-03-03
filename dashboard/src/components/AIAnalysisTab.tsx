@@ -137,13 +137,13 @@ export function AIAnalysisTab({
       {!hasRun && !isLoading && (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
           <Sparkles className="h-10 w-10 text-violet-400/40" />
-          <p className="text-zinc-500 text-sm max-w-xs">
+          <p className="text-zinc-500 text-sm max-w-xs transition-opacity">
             Click{" "}
             <strong className="text-violet-400">Analyze</strong> to get a
-            Gemini-powered Fundamental vs. Technical report for this stock.
+            Gemini/Groq-powered Fundamental vs. Technical report for this stock.
           </p>
-          <p className="text-zinc-600 text-xs">
-            Requires GEMINI_API_KEY in .env.local
+          <p className="text-zinc-600 text-xs mt-1 italic">
+            Uses Gemini (Primary) or Groq (Fallback). Keys required in .env.local
           </p>
         </div>
       )}
