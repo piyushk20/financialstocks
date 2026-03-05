@@ -169,7 +169,7 @@ def _get_news(ticker_sym: str) -> list:
 import re
 
 def _validate_ticker(ticker: str):
-    if not ticker or not re.match(r"^[A-Z0-9.\-_]{1,20}$", ticker, re.I):
+    if not ticker or not re.match(r"^[A-Z0-9.\-_^]{1,20}$", ticker, re.I):
         raise HTTPException(status_code=400, detail="Invalid ticker format")
 
 

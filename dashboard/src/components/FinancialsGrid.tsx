@@ -132,7 +132,7 @@ export function FinancialsGrid({ income, balance, cashflow, loading, period, onP
     <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Financials</h2>
-        <div className="flex rounded-lg overflow-hidden border border-zinc-700">
+        <div className="flex rounded-lg overflow-hidden border border-zinc-700" suppressHydrationWarning>
           {(["annual", "quarterly"] as const).map((p) => (
             <button key={p} onClick={() => onPeriodChange(p)}
               className={`px-3 py-1 text-xs font-medium transition-colors ${period === p ? "bg-violet-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>

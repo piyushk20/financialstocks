@@ -27,14 +27,14 @@ export async function POST(req: Request) {
           const data = await res.json();
           results[sym] = data.snapshot || { changePercent: 0 };
         }
-      } catch (_e) {
+      } catch {
         console.error(`Failed to fetch snapshot for ${sym}`);
       }
     });
 
     await Promise.all(promises);
     return NextResponse.json(results);
-  } catch (_e) {
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
