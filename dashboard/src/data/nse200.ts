@@ -135,7 +135,7 @@ export const NSE200: StockEntry[] = [
   { symbol: "NIACL.NS", name: "New India Assurance Company", sector: "Insurance" },
   { symbol: "GICRE.NS", name: "General Insurance Corporation", sector: "Insurance" },
   { symbol: "INDHOTEL.NS", name: "Indian Hotels Company (Taj)", sector: "Hotels" },
-  { symbol: "LEMONTRE.NS", name: "Lemon Tree Hotels", sector: "Hotels" },
+  { symbol: "LEMONTREE.NS", name: "Lemon Tree Hotels", sector: "Hotels" },
   { symbol: "IRCTC.NS", name: "Indian Railway Catering Corp", sector: "Travel" },
   { symbol: "CONCOR.NS", name: "Container Corporation of India", sector: "Logistics" },
   { symbol: "MAHINDCIE.NS", name: "Mahindra CIE Automotive", sector: "Auto Ancillary" },
@@ -187,7 +187,12 @@ export const NSE200: StockEntry[] = [
   { symbol: "^NSEBANK", name: "Bank Nifty", sector: "Index" },
   { symbol: "^CNXPHARMA", name: "Nifty Pharma", sector: "Index" },
   { symbol: "^CNXIT", name: "Nifty IT", sector: "Index" },
-  { symbol: "NIFTY_DEFENCE.NS", name: "Nifty Defence", sector: "Index" },
+  { symbol: "^CNXFMCG", name: "Nifty FMCG", sector: "Index" },
+  { symbol: "^CNXINFRA", name: "Nifty Infra", sector: "Index" },
+  { symbol: "^CNXENERGY", name: "Nifty Energy", sector: "Index" },
+  { symbol: "^CNXAUTO", name: "Nifty Auto", sector: "Index" },
+  { symbol: "^CNXMETAL", name: "Nifty Metal", sector: "Index" },
+  { symbol: "DEFANCE.NS", name: "Nifty Defence (ETF)", sector: "Index" },
 ];
 
 export const SECTORS = [...new Set(NSE200.map((s) => s.sector))].sort();
