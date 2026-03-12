@@ -18,7 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { NSE200, SECTORS, type StockEntry } from "@/data/nse200";
+import { NSE500, SECTORS, type StockEntry } from "@/data/nse500";
 
 interface StockPickerProps {
   value: string;
@@ -29,8 +29,8 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
   const [open, setOpen] = useState(false);
   const [sector, setSector] = useState<string | null>(null);
 
-  const filtered = sector ? NSE200.filter((s) => s.sector === sector) : NSE200;
-  const current = NSE200.find((s) => s.symbol === value);
+  const filtered = sector ? NSE500.filter((s) => s.sector === sector) : NSE500;
+  const current = NSE500.find((s) => s.symbol === value);
 
   return (
     <div className="flex flex-col gap-2">
@@ -53,7 +53,7 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
                   <span className="text-zinc-400 truncate text-xs">{current.name}</span>
                 </span>
               ) : (
-                <span className="text-zinc-500">Search NSE 200…</span>
+                <span className="text-zinc-500">Search NSE 500…</span>
               )}
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
@@ -72,7 +72,7 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
                   {filtered.map((stock: StockEntry) => (
                     <CommandItem
                       key={stock.symbol}
-                      value={`${stock.symbol} ${stock.name}`}
+                      value={`${stock.symbol} ${stock.name}`.toLowerCase()}
                       onSelect={() => {
                         onChange(stock.symbol);
                         setOpen(false);

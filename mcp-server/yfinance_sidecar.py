@@ -42,14 +42,30 @@ def _safe_float(v):
 def _get_snapshot(ticker_sym: str) -> dict:
     t = yf.Ticker(ticker_sym)
     info = t.info or {}
+    
     price = _safe_float(info.get("currentPrice") or info.get("regularMarketPrice"))
     prev_close = _safe_float(info.get("previousClose") or info.get("regularMarketPreviousClose"))
+    
+    # Fallback for indices where info is often empty
+    if price is None or prev_close is None:
+        try:
+            hist = t.history(period="2d")
+            if not hist.empty:
+                if price is None:
+                    price = _safe_float(hist["Close"].iloc[-1])
+                if prev_close is None and len(hist) > 1:
+                    prev_close = _safe_float(hist["Close"].iloc[-2])
+                elif prev_close is None:
+                    prev_close = _safe_float(hist["Open"].iloc[-1])
+        except Exception:
+            pass
+
     change = round(price - prev_close, 4) if price and prev_close else None
     pct_change = round((change / prev_close) * 100, 4) if change and prev_close else None
 
     return {
         "ticker": ticker_sym,
-        "name": info.get("longName") or info.get("shortName", ticker_sym),
+        "name": info.get("longName") or info.get("shortName") or ticker_sym,
         "price": price,
         "open": _safe_float(info.get("open") or info.get("regularMarketOpen")),
         "high": _safe_float(info.get("dayHigh") or info.get("regularMarketDayHigh")),

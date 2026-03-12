@@ -15,9 +15,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NSE 200 Stock Dashboard",
-  description: "Elite stock analysis dashboard for India's NSE 200 — real-time price, financials, technicals, and AI-powered analysis.",
-  keywords: ["NSE", "stock dashboard", "Indian stocks", "technical analysis", "fundamental analysis"],
+  title: "NSE 500 Stock Dashboard",
+  description: "Elite stock analysis dashboard for India's Nifty 500 — real-time price, financials, technicals, and AI-powered analysis.",
+  keywords: ["NSE", "Nifty 500", "stock dashboard", "Indian stocks", "technical analysis", "fundamental analysis"],
 };
 
 export default function RootLayout({
