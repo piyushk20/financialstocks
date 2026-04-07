@@ -21,6 +21,16 @@ mcp = FastMCP("financial-datasets")
 FINANCIAL_DATASETS_API_BASE = "https://api.financialdatasets.ai"
 
 
+# Helper function to truncate JSON output if it's too large
+def truncate_json(data: any, max_chars: int = 600) -> str:
+    """Stringify data and truncate if it exceeds max_chars."""
+    content = json.dumps(data, indent=2)
+    if len(content) > max_chars:
+        warning = f"\n\n... [Output truncated to {max_chars} characters for performance. Please use 'limit' or 'period' parameters to narrow your search.]"
+        return content[:max_chars - len(warning)] + warning
+    return content
+
+
 # Helper function to make API requests
 async def make_request(url: str) -> dict[str, any] | None:
     """Make a request to the Financial Datasets API with proper error handling."""
@@ -69,7 +79,7 @@ async def get_income_statements(
         return "Unable to fetch income statements or no income statements found."
 
     # Stringify the income statements
-    return json.dumps(income_statements, indent=2)
+    return truncate_json(income_statements)
 
 
 @mcp.tool()
@@ -101,7 +111,7 @@ async def get_balance_sheets(
         return "Unable to fetch balance sheets or no balance sheets found."
 
     # Stringify the balance sheets
-    return json.dumps(balance_sheets, indent=2)
+    return truncate_json(balance_sheets)
 
 
 @mcp.tool()
@@ -133,7 +143,7 @@ async def get_cash_flow_statements(
         return "Unable to fetch cash flow statements or no cash flow statements found."
 
     # Stringify the cash flow statements
-    return json.dumps(cash_flow_statements, indent=2)
+    return truncate_json(cash_flow_statements)
 
 
 @mcp.tool()
@@ -158,8 +168,8 @@ async def get_current_stock_price(ticker: str) -> str:
     if not snapshot:
         return "Unable to fetch current price or no current price found."
 
-    # Stringify the current price
-    return json.dumps(snapshot, indent=2)
+    # Stringify the current price with truncation
+    return truncate_json(snapshot)
 
 
 @mcp.tool()
@@ -169,6 +179,7 @@ async def get_historical_stock_prices(
     end_date: str,
     interval: str = "day",
     interval_multiplier: int = 1,
+    limit: int = 100,
 ) -> str:
     """Gets historical stock prices for a company.
 
@@ -178,9 +189,10 @@ async def get_historical_stock_prices(
         end_date: End date of the price data (e.g. 2020-12-31)
         interval: Interval of the price data (e.g. minute, hour, day, week, month)
         interval_multiplier: Multiplier of the interval (e.g. 1, 2, 3)
+        limit: Maximum number of price points to return (default: 100)
     """
     # Fetch data from the API
-    url = f"{FINANCIAL_DATASETS_API_BASE}/prices?ticker={ticker}&interval={interval}&interval_multiplier={interval_multiplier}&start_date={start_date}&end_date={end_date}"
+    url = f"{FINANCIAL_DATASETS_API_BASE}/prices?ticker={ticker}&interval={interval}&interval_multiplier={interval_multiplier}&start_date={start_date}&end_date={end_date}&limit={limit}"
     data = await make_request(url)
 
     # Check if data is found
@@ -195,18 +207,19 @@ async def get_historical_stock_prices(
         return "Unable to fetch prices or no prices found."
 
     # Stringify the prices
-    return json.dumps(prices, indent=2)
+    return truncate_json(prices)
 
 
 @mcp.tool()
-async def get_company_news(ticker: str) -> str:
+async def get_company_news(ticker: str, limit: int = 10) -> str:
     """Get news for a company.
 
     Args:
         ticker: Ticker symbol of the company (e.g. AAPL, GOOGL)
+        limit: Number of news articles to return (default: 10)
     """
     # Fetch data from the API
-    url = f"{FINANCIAL_DATASETS_API_BASE}/news?ticker={ticker}"
+    url = f"{FINANCIAL_DATASETS_API_BASE}/news?ticker={ticker}&limit={limit}"
     data = await make_request(url)
 
     # Check if data is found
@@ -219,119 +232,7 @@ async def get_company_news(ticker: str) -> str:
     # Check if news are found
     if not news:
         return "Unable to fetch news or no news found."
-    return json.dumps(news, indent=2)
-
-
-@mcp.tool()
-async def get_available_crypto_tickers() -> str:
-    """
-    Gets all available crypto tickers.
-    """
-    # Fetch data from the API
-    url = f"{FINANCIAL_DATASETS_API_BASE}/crypto/prices/tickers"
-    data = await make_request(url)
-
-    # Check if data is found
-    if not data:
-        return "Unable to fetch available crypto tickers or no available crypto tickers found."
-
-    # Extract the available crypto tickers
-    tickers = data.get("tickers", [])
-
-    # Stringify the available crypto tickers
-    return json.dumps(tickers, indent=2)
-
-
-@mcp.tool()
-async def get_crypto_prices(
-    ticker: str,
-    start_date: str,
-    end_date: str,
-    interval: str = "day",
-    interval_multiplier: int = 1,
-) -> str:
-    """
-    Gets historical prices for a crypto currency.
-    """
-    # Fetch data from the API
-    url = f"{FINANCIAL_DATASETS_API_BASE}/crypto/prices/?ticker={ticker}&interval={interval}&interval_multiplier={interval_multiplier}&start_date={start_date}&end_date={end_date}"
-    data = await make_request(url)
-
-    # Check if data is found
-    if not data:
-        return "Unable to fetch prices or no prices found."
-
-    # Extract the prices
-    prices = data.get("prices", [])
-
-    # Check if prices are found
-    if not prices:
-        return "Unable to fetch prices or no prices found."
-
-    # Stringify the prices
-    return json.dumps(prices, indent=2)
-
-
-@mcp.tool()
-async def get_historical_crypto_prices(
-    ticker: str,
-    start_date: str,
-    end_date: str,
-    interval: str = "day",
-    interval_multiplier: int = 1,
-) -> str:
-    """Gets historical prices for a crypto currency.
-
-    Args:
-        ticker: Ticker symbol of the crypto currency (e.g. BTC-USD). The list of available crypto tickers can be retrieved via the get_available_crypto_tickers tool.
-        start_date: Start date of the price data (e.g. 2020-01-01)
-        end_date: End date of the price data (e.g. 2020-12-31)
-        interval: Interval of the price data (e.g. minute, hour, day, week, month)
-        interval_multiplier: Multiplier of the interval (e.g. 1, 2, 3)
-    """
-    # Fetch data from the API
-    url = f"{FINANCIAL_DATASETS_API_BASE}/crypto/prices/?ticker={ticker}&interval={interval}&interval_multiplier={interval_multiplier}&start_date={start_date}&end_date={end_date}"
-    data = await make_request(url)
-
-    # Check if data is found
-    if not data:
-        return "Unable to fetch prices or no prices found."
-
-    # Extract the prices
-    prices = data.get("prices", [])
-
-    # Check if prices are found
-    if not prices:
-        return "Unable to fetch prices or no prices found."
-
-    # Stringify the prices
-    return json.dumps(prices, indent=2)
-
-
-@mcp.tool()
-async def get_current_crypto_price(ticker: str) -> str:
-    """Get the current / latest price of a crypto currency.
-
-    Args:
-        ticker: Ticker symbol of the crypto currency (e.g. BTC-USD). The list of available crypto tickers can be retrieved via the get_available_crypto_tickers tool.
-    """
-    # Fetch data from the API
-    url = f"{FINANCIAL_DATASETS_API_BASE}/crypto/prices/snapshot/?ticker={ticker}"
-    data = await make_request(url)
-
-    # Check if data is found
-    if not data:
-        return "Unable to fetch current price or no current price found."
-
-    # Extract the current price
-    snapshot = data.get("snapshot", {})
-
-    # Check if current price is found
-    if not snapshot:
-        return "Unable to fetch current price or no current price found."
-
-    # Stringify the current price
-    return json.dumps(snapshot, indent=2)
+    return truncate_json(news)
 
 
 @mcp.tool()
@@ -363,7 +264,7 @@ async def get_sec_filings(
         return "Unable to fetch SEC filings or no SEC filings found."
 
     # Stringify the SEC filings
-    return json.dumps(filings, indent=2)
+    return truncate_json(filings)
 
 if __name__ == "__main__":
     # Log server startup

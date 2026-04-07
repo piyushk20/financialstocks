@@ -1,8 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { type IncomeStatement, type BalanceSheet } from "@/lib/financialDatasets";
 
 export const maxDuration = 60;
@@ -16,26 +14,9 @@ export async function POST(req: Request) {
     }
     console.log(`[AI-API] Analyzing ${symbol}`);
 
-    // Load keys from environment or .env.local
-    let apiKey = process.env.GEMINI_API_KEY;
-    let groqKey = process.env.GROQ_API_KEY;
-
-    try {
-      const envPath = path.join(process.cwd(), '.env.local');
-      if (fs.existsSync(envPath)) {
-        const envContent = fs.readFileSync(envPath, 'utf8');
-        if (!apiKey) {
-          const gemMatch = envContent.match(/GEMINI_API_KEY="?([^"\n\r]*)"?/);
-          if (gemMatch) apiKey = gemMatch[1];
-        }
-        if (!groqKey) {
-          const groqMatch = envContent.match(/GROQ_API_KEY="?([^"\n\r]*)"?/);
-          if (groqMatch) groqKey = groqMatch[1];
-        }
-      }
-    } catch {
-      // Intentionally silent or logged elsewhere
-    }
+    // Load keys from environment (Next.js handles .env.local automatically)
+    const apiKey = process.env.GEMINI_API_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
 
     const latestRsi = (technicals?.rsi as (number | null)[] | undefined)?.filter((v): v is number => v != null).at(-1);
     const latestSma50 = (technicals?.sma50 as (number | null)[] | undefined)?.filter((v): v is number => v != null).at(-1);

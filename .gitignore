@@ -3,14 +3,18 @@
 .env.local
 .env.production
 .env.development
+.env.test
 *.env
+*.env.local
+*.env.*
 auth.json
 credentials.json
 token.json
 
-# Local keys/logs
-dev.log
-sidecar.log
+# Backups and sensitive local files
+dashboard_env_backup.txt
+backup*.txt
+*.bak
 dump_keys.json
 ruff_results.txt
 eslint_results.txt
