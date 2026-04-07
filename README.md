@@ -9,6 +9,19 @@
 
 ---
 
+## 📷 Visual Preview
+
+![Main Dashboard](docs/dashboard_main.png)
+*Professional Dark Mode Dashboard with SMA/EMA Price Overlays and Technical Indicators (RSI/MACD)*
+
+![News & Sentiment](docs/dashboard_news.png)
+*Real-time News Sentiment Analysis for NSE Stocks*
+
+![Dashboard Demo](docs/dashboard_demo.webp)
+*Interactive Dashboard Exploration*
+
+---
+
 ## ✨ What It Does
 
 | Feature                 | Description                                             |
