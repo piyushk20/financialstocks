@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.36",
+    "@ai-sdk/groq": "^3.0.35",
     "@ai-sdk/openai": "^3.0.39",
     "ai": "^6.0.108",
     "class-variance-authority": "^0.7.1",
@@ -33,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "shadcn": "^3.8.5",

@@ -1,9 +1,45 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { createGroq } from "@ai-sdk/groq";
+import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { type IncomeStatement, type BalanceSheet } from "@/lib/financialDatasets";
 
 export const maxDuration = 60;
+
+/**
+ * Deterministic Intelligence Fallback
+ * Generates a high-quality analysis locally when all AI providers are exhausted.
+ */
+function generateLocalAnalysis(
+  symbol: string,
+  price: number | undefined,
+  rsi: number | undefined,
+  sma50: number | undefined,
+  macd: number | undefined,
+  metrics: Record<string, unknown> | null
+) {
+  const trend = price && sma50 ? (price > sma50 ? "BULLISH" : "BEARISH") : "NEUTRAL";
+  const momentum = rsi ? (rsi > 70 ? "OVERBOUGHT" : rsi < 30 ? "OVERSOLD" : "NEUTRAL") : "STABLE";
+
+  return `### 🛡️ TRADER'S REPORT (Local Engine)
+*Note: All AI providers quota exceeded. Generated via deterministic intelligence fallback.*
+
+**Symbol:** ${symbol} | **Price:** ${price || "N/A"}
+**Primary Trend:** ${trend} (Price ${price && sma50 ? (price > sma50 ? "above" : "below") : "near"} 50-day SMA)
+**Technical Sentiment:** ${momentum} (RSI: ${rsi || "N/A"})
+
+### 🔬 QUANTITATIVE ANALYSIS
+- **Trend Strength**: ${macd && macd > 0 ? "Positive Convergence" : "Negative Momentum"} detected.
+- **Value Metric**: P/E Ratio is ${(metrics?.p_e_ratio as number | null) || "N/A"}. ${(metrics?.p_e_ratio as number) < 20 ? "Undervalued vs Peers." : "Premium valuation."}
+- **Profitability**: Net Margin of ${metrics?.net_margin ? ((metrics.net_margin as number) * 100).toFixed(2) + "%" : "N/A"}.
+
+### 🎯 FINAL VERDICT
+- **Entry Zone**: ${price ? (price * 0.98).toFixed(2) : "N/A"} (2% Pullback)
+- **Target**: ${price ? (price * 1.15).toFixed(2) : "N/A"} (+15% Upside)
+- **Stop Loss**: ${price ? (price * 0.94).toFixed(2) : "N/A"} (-6% Risk)
+
+**Confidence:** ${trend === "BULLISH" ? "Buy" : "Neutral / Wait"}`;
+}
 
 export async function POST(req: Request) {
   try {
@@ -12,107 +48,83 @@ export async function POST(req: Request) {
     if (!symbol || !/^[A-Z0-9.\-_^]{1,20}$/i.test(symbol)) {
       return NextResponse.json({ error: "Invalid or missing symbol" }, { status: 400 });
     }
+
     console.log(`[AI-API] Analyzing ${symbol}`);
 
-    // Load keys from environment (Next.js handles .env.local automatically)
-    const apiKey = process.env.GEMINI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
     const groqKey = process.env.GROQ_API_KEY;
 
+    // 1. EXTRACT TECHNICALS
     const latestRsi = (technicals?.rsi as (number | null)[] | undefined)?.filter((v): v is number => v != null).at(-1);
     const latestSma50 = (technicals?.sma50 as (number | null)[] | undefined)?.filter((v): v is number => v != null).at(-1);
     const latestMacd = (technicals?.macd as (number | null)[] | undefined)?.filter((v): v is number => v != null).at(-1);
 
-    // Load Financial Datasets intelligence (MCP aligned source)
+    // 2. Load Financial Datasets enrichment metrics
     let enrichedMetrics = null;
-    const fdKey = process.env.FINANCIAL_DATASETS_API_KEY || (apiKey && apiKey.length > 20 ? apiKey : null); // Fallback check
-    
+    const fdKey = process.env.FINANCIAL_DATASETS_API_KEY;
     if (fdKey && snapshot?.ticker) {
       try {
         const fdRes = await fetch(`https://api.financialdatasets.ai/financial-metrics?ticker=${snapshot.ticker}`, {
-          headers: { "X-API-KEY": fdKey }
+          headers: { "X-API-KEY": fdKey },
         });
         if (fdRes.ok) {
           const fdData = await fdRes.json();
-          enrichedMetrics = fdData.financial_metrics?.[0]; // Get latest TTM/Annual metrics
+          enrichedMetrics = fdData.financial_metrics?.[0];
         }
       } catch (err) {
-        console.error("[AI-API] Fallback Error:", err);
+        console.warn("[AI-API] Financial Datasets fetch failed:", err);
       }
     }
 
-    const prompt = query 
-      ? `You are a professional quantitative trader.
-         USER REQUEST: "${query}"
-         
-         STOCK CONTEXT:
-         - Symbol: ${snapshot?.ticker}
-         - Price: ${snapshot?.price}
-         - Technicals: RSI=${latestRsi}, SMA50=${latestSma50}, MACD=${latestMacd}
-         - Detailed Metrics (Standardized): ${JSON.stringify(enrichedMetrics || "N/A")}
-         - Recent Income: ${JSON.stringify((income as IncomeStatement[])?.slice(0, 2))}
-         
-         INSTRUCTIONS:
-         Answer the user's question directly and precisely using the provided data.
-         Format as a professional report card. Use level 3 (###) headers for sections.`
-      : `You are a professional quantitative trader at Citadel. 
-         Provide a high-conviction technical and quantitative analysis of ${snapshot?.ticker || "the stock"}.
-         
-         ### CONTEXT DATA
-         Price Data: ${JSON.stringify(snapshot)}
-         Key Ratios & Metrics: ${JSON.stringify(enrichedMetrics || "Standard metrics unavailable")}
-         Technical RSI: ${latestRsi || "N/A"}
-         Moving Avg (50): ${latestSma50 || "N/A"}
-         MACD: ${latestMacd || "N/A"}
-         Recent Income: ${JSON.stringify((income as IncomeStatement[])?.slice(0, 2))}
-         Recent Balance: ${JSON.stringify((balance as BalanceSheet[])?.slice(0, 1))}
-         
-         ### INSTRUCTIONS
-         - Identify primary trend direction.
-         - Spot key support/resistance levels.
-         - Evaluate RSI and MACD for momentum strength.
-         - Synthesize fundamental vs technical setup.
-         - Provide clear Entry, Stop-Loss, and Target prices.
-         - Confidence: [Strong Buy | Buy | Neutral | Sell | Strong Sell].
-         
-         Format as a crisp trader's report card. Keep it concise but data-driven.`;
+    // 3. CONTEXT TRUNCATION
+    const incomeSummary = (income as IncomeStatement[])?.slice(0, 1);
 
-    // Try Gemini first, then Groq.
-    try {
-      // FORCE GROQ for now because we KNOW Gemini is exhausted in this environment
-      // This ensures the user gets an immediate working experience.
-      if (!apiKey || apiKey.startsWith("AIza")) { 
-          // Gemini is historically flaky in this demo environment, 
-          // let's try Groq immediately if we have a key.
-          if (groqKey) throw new Error("Fallback requested");
+    const prompt = query
+      ? `Quant Trader Prompt: "${query}" for ${symbol}. Price: ${snapshot?.price}. RSI: ${latestRsi}. Metrics: ${JSON.stringify(enrichedMetrics || "N/A")}`
+      : `Provide quantitative analysis for ${symbol}. Context: Price=${snapshot?.price}, RSI=${latestRsi}, SMA50=${latestSma50}. Metrics: ${JSON.stringify(enrichedMetrics)}. Recent Income: ${JSON.stringify(incomeSummary)}. Format as a concise trader's report card with trend, entry, target and stop-loss.`;
+
+    // 4. TRY GEMINI 2.0 FLASH (Primary)
+    if (geminiKey) {
+      try {
+        console.log("[AI-API] Trying Gemini 2.0 Flash...");
+        const google = createGoogleGenerativeAI({ apiKey: geminiKey });
+        const result = await generateText({
+          model: google("gemini-2.0-flash"),
+          prompt,
+          maxRetries: 0,
+        });
+        console.log("[AI-API] ✅ Gemini succeeded.");
+        return new Response(result.text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      } catch (geminiErr: unknown) {
+        const err = geminiErr as { statusCode?: number; message?: string };
+        console.warn("[AI-API] Gemini failed:", err.message || geminiErr);
       }
-
-      console.log("[AI-API] Attempting Gemini...");
-      const google = createGoogleGenerativeAI({ apiKey: apiKey || "" });
-      const result = await streamText({
-        model: google("gemini-1.5-flash"),
-        prompt,
-        maxRetries: 0,
-      });
-      return result.toTextStreamResponse();
-    } catch {
-      console.warn("[AI-API] Gemini skipped or failed, using Groq.");
-      
-      if (!groqKey) {
-        return new Response("No valid AI keys found.", { status: 500 });
-      }
-
-      const { createOpenAI } = await import("@ai-sdk/openai");
-      const groq = createOpenAI({
-        baseURL: 'https://api.groq.com/openai/v1',
-        apiKey: groqKey,
-      });
-
-      const result = await streamText({
-        model: groq("llama-3.3-70b-versatile"),
-        prompt,
-      });
-      return result.toTextStreamResponse();
     }
+
+    // 5. TRY GROQ llama-3.3-70b-versatile (Secondary fallback)
+    if (groqKey) {
+      try {
+        console.log("[AI-API] Trying Groq (llama-3.3-70b-versatile)...");
+        const groq = createGroq({ apiKey: groqKey });
+        const result = await generateText({
+          model: groq("llama-3.3-70b-versatile"),
+          prompt,
+          maxRetries: 0,
+        });
+        console.log("[AI-API] ✅ Groq succeeded.");
+        const groqPrefix = `### ⚡ TRADER'S REPORT (Powered by Groq / Llama 3.3 70B)\n\n`;
+        return new Response(groqPrefix + result.text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      } catch (groqErr: unknown) {
+        const err = groqErr as { message?: string };
+        console.warn("[AI-API] Groq failed:", err.message || groqErr);
+      }
+    }
+
+    // 6. FINAL FALLBACK: Local Deterministic Analysis
+    console.log("[AI-API] All providers failed. Using local engine.");
+    const finalFallback = generateLocalAnalysis(symbol, snapshot?.price, latestRsi, latestSma50, latestMacd, enrichedMetrics);
+    return new Response(finalFallback, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+
   } catch (err: unknown) {
     console.error("[AI-API] CRITICAL ERROR", err);
     return new Response("Internal Server Error", { status: 500 });

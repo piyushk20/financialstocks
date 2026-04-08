@@ -1,4 +1,4 @@
-# 📊 NSE 200 Stock Dashboard
+ NSE 200 Stock Dashboard
 
 > A professional, real-time Indian stock market dashboard — built with Next.js 15, yfinance, and AI-powered analysis.
 
