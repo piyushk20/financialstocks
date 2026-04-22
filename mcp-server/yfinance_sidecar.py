@@ -165,22 +165,48 @@ def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
 
 
 def _get_news(ticker_sym: str) -> list:
-    t = yf.Ticker(ticker_sym)
-    raw_news = t.news or []
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+    
+    # Clean the ticker symbol for search query
+    clean_ticker = ticker_sym.replace(".NS", "").replace(".BO", "").replace("^", "")
+    query = f"{clean_ticker}+NSE+stock+news"
+    url = f"https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        res = urllib.request.urlopen(req, timeout=5).read()
+        root = ET.fromstring(res)
+    except Exception as e:
+        print(f"Error fetching news for {ticker_sym}: {e}")
+        return []
+
     result = []
-    for item in raw_news[:25]: # Fetch a bit more to sort safely
-        ct = item.get("content", {})
-        title = ct.get("title") or item.get("title", "")
-        url = ct.get("canonicalUrl", {}).get("url") or item.get("link", "")
-        published = ct.get("pubDate") or item.get("providerPublishTime", "")
-        provider = ct.get("provider", {}).get("displayName") or item.get("publisher", "")
+    for item in root.findall('.//item')[:25]:
+        title_raw = item.find('title').text if item.find('title') is not None else ""
+        link = item.find('link').text if item.find('link') is not None else ""
+        pub_date_raw = item.find('pubDate').text if item.find('pubDate') is not None else ""
+        
+        if ' - ' in title_raw:
+            title, source = title_raw.rsplit(' - ', 1)
+        else:
+            title, source = title_raw, 'Google News'
+            
+        try:
+            dt = parsedate_to_datetime(pub_date_raw)
+            published_at = dt.isoformat()
+        except:
+            published_at = ""
+            
         result.append({
             "title": title,
-            "url": url,
-            "source": provider,
-            "published_at": str(published),
-            "summary": ct.get("summary"),
+            "url": link,
+            "source": source,
+            "published_at": published_at,
+            "summary": ""
         })
+
     result.sort(key=lambda x: x["published_at"], reverse=True)
     return result[:15]
 
