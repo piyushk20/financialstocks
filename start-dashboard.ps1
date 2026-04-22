@@ -12,7 +12,7 @@ if (-not (Test-Path $uv)) {
 }
 
 Write-Host ""
-Write-Host "  NSE 200 Stock Dashboard" -ForegroundColor Cyan
+Write-Host "  NSE 500 FinceptTerminal" -ForegroundColor Cyan
 Write-Host "  ────────────────────────" -ForegroundColor DarkGray
 Write-Host ""
 
