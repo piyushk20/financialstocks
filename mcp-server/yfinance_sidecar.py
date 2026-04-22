@@ -187,7 +187,7 @@ def _get_news(ticker_sym: str) -> list:
 import re
 
 def _validate_ticker(ticker: str):
-    if not ticker or not re.match(r"^[A-Z0-9.\-_^]{1,20}$", ticker, re.I):
+    if not ticker or not re.match(r"^[A-Z0-9.\-_^=&]{1,20}$", ticker, re.I):
         raise HTTPException(status_code=400, detail="Invalid ticker format")
 
 
@@ -254,6 +254,11 @@ class MomentumRequest(BaseModel):
 
 class WMARequest(BaseModel):
     symbols: list[str]
+    top_n: int = 50
+
+class VCPRequest(BaseModel):
+    symbols: list[str]
+    index_symbol: str = "^NSEI"
     top_n: int = 50
 
 def _scan_momentum(params: MomentumRequest) -> list:
@@ -450,7 +455,189 @@ def _scan_wma_crossover(params: WMARequest) -> list:
     results.sort(key=lambda x: x["days_ago"])
     return results[:params.top_n]
 
+def _vcp_get_perf(ser, days):
+    """Calculate percentage performance over N days."""
+    if len(ser) < days:
+        return 0.0
+    end = float(ser.iloc[-1])
+    start = float(ser.iloc[-days])
+    return (end - start) / start if start != 0 else 0.0
+
+def _vcp_range_pct(h, l, price, start_i, end_i):
+    """Get H-L range as percent of price over a slice."""
+    h_slice = h.iloc[start_i:end_i]
+    l_slice = l.iloc[start_i:end_i]
+    if h_slice.empty:
+        return 0.0
+    return ((float(h_slice.max()) - float(l_slice.min())) / price) * 100
+
+def _process_vcp_batch(symbols_batch, index_symbol):
+    """Download and process a batch of symbols for VCP criteria."""
+    all_tickers = list(set(symbols_batch + [index_symbol]))
+    try:
+        df = yf.download(
+            all_tickers,
+            period="14mo",
+            interval="1d",
+            group_by="ticker",
+            threads=True,
+            auto_adjust=True,
+            progress=False,
+        )
+    except Exception as e:
+        print(f"VCP Batch Error: {e}")
+        return []
+
+    is_multi = isinstance(df.columns, pd.MultiIndex)
+    
+    # Get index
+    try:
+        if is_multi:
+            if index_symbol in df.columns.levels[0]:
+                idx_df = df[index_symbol].dropna(how="all")
+                if not idx_df.empty:
+                    index_close = idx_df["Close"]
+        else:
+            # Single ticker downloaded
+            if not df.empty:
+                index_close = df["Close"]
+    except Exception as e:
+        print(f"Index Processing Error for {index_symbol}: {e}")
+        pass
+    
+    i_perf = 0.0
+    if index_close is not None and len(index_close) >= 252:
+        i_perf = (
+            _vcp_get_perf(index_close, 63) * 2
+            + _vcp_get_perf(index_close, 126)
+            + _vcp_get_perf(index_close, 189)
+            + _vcp_get_perf(index_close, 252)
+        )
+
+    results = []
+    for symbol in symbols_batch:
+        if symbol == index_symbol:
+            continue
+        try:
+            if is_multi:
+                if symbol not in df.columns.levels[0]:
+                    continue
+                ticker_df = df[symbol].dropna(how="all")
+            else:
+                ticker_df = df.dropna(how="all")
+
+            if len(ticker_df) < 252:
+                continue
+
+            close = ticker_df["Close"]
+            high = ticker_df["High"]
+            low = ticker_df["Low"]
+
+            p = _safe_float(close.iloc[-1])
+            if not p:
+                continue
+
+            sma50 = ta.sma(close, length=50)
+            sma150 = ta.sma(close, length=150)
+            sma200 = ta.sma(close, length=200)
+            if sma50 is None or sma150 is None or sma200 is None:
+                continue
+
+            s50 = _safe_float(sma50.iloc[-1]) or 0
+            s150 = _safe_float(sma150.iloc[-1]) or 0
+            s200 = _safe_float(sma200.iloc[-1]) or 0
+            s200_1mo = _safe_float(sma200.iloc[-22]) if len(sma200) > 22 else s200
+
+            low_52w = float(close.iloc[-252:].min())
+            high_52w = float(close.iloc[-252:].max())
+
+            # Minervini Trend Template (7 criteria)
+            c1 = bool(p > s150 and p > s200)
+            c2 = bool(s150 > s200)
+            c3 = bool(s200 > s200_1mo)
+            c4 = bool(s50 > s150 and s50 > s200)
+            c5 = bool(p > s50)
+            c6 = bool(p > low_52w * 1.3)
+            c7 = bool(p > high_52w * 0.75)
+            template_score = sum([c1, c2, c3, c4, c5, c6, c7])
+            is_uptrend = template_score >= 5
+
+            # Relative Strength Score
+            rs_score = 0.0
+            if index_close is not None and len(index_close) >= 252:
+                s_perf = (
+                    _vcp_get_perf(close, 63) * 2
+                    + _vcp_get_perf(close, 126)
+                    + _vcp_get_perf(close, 189)
+                    + _vcp_get_perf(close, 252)
+                )
+                if i_perf != 0:
+                    rs_score = round((s_perf / abs(i_perf)) * 10, 2)
+                else:
+                    rs_score = round(s_perf * 100, 2)
+
+            # VCP Tightness
+            range_now = _vcp_range_pct(high, low, p, -5, None)
+            range_prev = _vcp_range_pct(high, low, p, -20, -5)
+            is_tight = bool(range_now < 8.0 and range_now < range_prev * 0.8)
+
+            # Past week check
+            met_past_week = any(
+                (_safe_float(close.iloc[d]) or 0) > (_safe_float(sma150.iloc[d]) or 0)
+                for d in range(-5, 0)
+            )
+
+            if is_uptrend or rs_score > 10:
+                results.append({
+                    "symbol": symbol,
+                    "price": round(p, 2),
+                    "rs_score": rs_score,
+                    "template_score": f"{template_score}/7",
+                    "is_tight": is_tight,
+                    "range_5d": round(range_now, 2),
+                    "met_past_week": met_past_week,
+                    "high_52w_dist": round(((high_52w - p) / p) * 100, 2),
+                })
+        except Exception as e:
+            print(f"Error processing VCP for {symbol}: {e}")
+            continue
+
+    return results
+
+def _scan_vcp(params: VCPRequest) -> list:
+    if not params.symbols:
+        return []
+
+    # Allow commodities if requested, VCP criteria will still apply
+    equity_symbols = params.symbols
+    if not equity_symbols:
+        return []
+
+    # Process in batches of 50 to avoid timeout + memory issues
+    BATCH_SIZE = 50
+    all_results = []
+    
+    for i in range(0, len(equity_symbols), BATCH_SIZE):
+        batch = equity_symbols[i:i + BATCH_SIZE]
+        batch_results = _process_vcp_batch(batch, params.index_symbol)
+        all_results.extend(batch_results)
+
+    # Sort by RS Score descending
+    all_results.sort(key=lambda x: x["rs_score"], reverse=True)
+    return all_results[:params.top_n]
+
+@app.post("/vcp-scanner")
+async def vcp_scanner(req: VCPRequest = Body(...)):
+    loop = asyncio.get_event_loop()
+    try:
+        matches = await loop.run_in_executor(executor, _scan_vcp, req)
+        return {"matches": matches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/wma44-crossover")
+
 async def wma44_crossover(req: WMARequest = Body(...)):
     loop = asyncio.get_event_loop()
     try:

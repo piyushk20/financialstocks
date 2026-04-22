@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, TrendingDown, Activity, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type PriceSnapshot } from "@/lib/financialDatasets";
-import { NSE200 } from "@/data/nse200";
+import { NSE500 } from "@/data/nse500";
 
 interface PriceHeaderProps {
   symbol: string;
@@ -18,8 +18,10 @@ function fmt(n: number | null | undefined, decimals = 2): string {
 }
 
 export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
-  const stock = NSE200.find((s) => s.symbol === symbol);
+  const stock = NSE500.find((s) => s.symbol === symbol);
   const isUp = (snapshot?.change ?? 0) >= 0;
+  const isGlobal = symbol.includes("=F");
+  const currencySymbol = isGlobal ? "$" : "₹";
 
   if (loading) {
     return (
@@ -42,9 +44,11 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="font-mono text-sm font-bold text-violet-400 tracking-widest">
-              {symbol.replace(".NS", "")}
+              {symbol.includes("=F") ? symbol : symbol.replace(".NS", "")}
             </span>
-            <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">NSE</span>
+            <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+              {isGlobal ? "COMEX/NYMEX" : "NSE"}
+            </span>
             {stock && (
               <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
                 {stock.sector}
@@ -69,7 +73,7 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
           className="rounded-xl px-2 -mx-2 flex items-baseline gap-3 mb-4"
         >
           <span className="text-5xl font-bold text-zinc-100 tracking-tight">
-            ₹{fmt(snapshot?.price)}
+            {currencySymbol}{fmt(snapshot?.price)}
           </span>
           <div className={`flex items-center gap-1 text-base font-semibold ${isUp ? "text-emerald-400" : "text-red-400"}`}>
             <span>{isUp ? "+" : ""}{fmt(snapshot?.change)}</span>
@@ -77,14 +81,14 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
           </div>
         </motion.div>
       </AnimatePresence>
-
+ 
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Open", value: `₹${fmt(snapshot?.open)}`, icon: <Activity className="h-3.5 w-3.5" /> },
-          { label: "High", value: `₹${fmt(snapshot?.high)}`, icon: <TrendingUp className="h-3.5 w-3.5 text-emerald-400" /> },
-          { label: "Low", value: `₹${fmt(snapshot?.low)}`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" /> },
-          { label: "Prev Close", value: `₹${fmt(snapshot?.previous_close)}`, icon: <DollarSign className="h-3.5 w-3.5" /> },
+          { label: "Open", value: `${currencySymbol}${fmt(snapshot?.open)}`, icon: <Activity className="h-3.5 w-3.5" /> },
+          { label: "High", value: `${currencySymbol}${fmt(snapshot?.high)}`, icon: <TrendingUp className="h-3.5 w-3.5 text-emerald-400" /> },
+          { label: "Low", value: `${currencySymbol}${fmt(snapshot?.low)}`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" /> },
+          { label: "Prev Close", value: `${currencySymbol}${fmt(snapshot?.previous_close)}`, icon: <DollarSign className="h-3.5 w-3.5" /> },
         ].map(({ label, value, icon }) => (
           <div key={label} className="bg-zinc-900/60 rounded-xl p-3">
             <div className="flex items-center gap-1 text-zinc-500 text-[10px] font-medium uppercase tracking-widest mb-1">

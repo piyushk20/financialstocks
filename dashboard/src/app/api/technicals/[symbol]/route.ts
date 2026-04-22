@@ -68,7 +68,7 @@ export async function GET(
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   const { symbol } = await params;
-  if (!/^[A-Z0-9.\-_\^]{1,20}$/i.test(symbol)) {
+  if (!/^[A-Z0-9.\-_\^=]{1,20}$/i.test(symbol)) {
     return NextResponse.json({ error: "Invalid symbol format" }, { status: 400 });
   }
 
@@ -130,6 +130,33 @@ export async function GET(
       v !== null && signalArr[i] !== null ? v - signalArr[i]! : null
     );
 
+    // Standard Pivot Points (Classic)
+    // Calculated using the PREVIOUS session's data for the CURRENT session
+    const lastIdx = prices.length - 1;
+    const prevIdx = prices.length - 2;
+    
+    let pivots = null;
+    if (prevIdx >= 0) {
+      const prev = prices[prevIdx];
+      const P = (prev.high + prev.low + prev.close) / 3;
+      const R1 = 2 * P - prev.low;
+      const S1 = 2 * P - prev.high;
+      const R2 = P + (prev.high - prev.low);
+      const S2 = P - (prev.high - prev.low);
+      
+      pivots = {
+        pivot: P,
+        r1: R1,
+        r2: R2,
+        s1: S1,
+        s2: S2,
+        prevHigh: prev.high,
+        prevLow: prev.low,
+        prevClose: prev.close,
+        date: prices[lastIdx].time
+      };
+    }
+
     return NextResponse.json({
       dates,
       rsi,
@@ -143,6 +170,7 @@ export async function GET(
       macd: macdLine,
       macdSignal: signalArr,
       macdHist,
+      pivots
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

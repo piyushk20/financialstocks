@@ -11,6 +11,41 @@ export interface StockEntry {
 
 export const NSE500: StockEntry[] = [
   {
+    "symbol": "GC=F",
+    "name": "Gold Futures",
+    "sector": "Commodity"
+  },
+  {
+    "symbol": "SI=F",
+    "name": "Silver Futures",
+    "sector": "Commodity"
+  },
+  {
+    "symbol": "CL=F",
+    "name": "Crude Oil Futures",
+    "sector": "Commodity"
+  },
+  {
+    "symbol": "NG=F",
+    "name": "Natural Gas Futures",
+    "sector": "Commodity"
+  },
+  {
+    "symbol": "HG=F",
+    "name": "Copper Futures",
+    "sector": "Commodity"
+  },
+  {
+    "symbol": "GOLDBEES.NS",
+    "name": "Gold BeES ETF",
+    "sector": "Commodity"
+  },
+  {
+    "symbol": "SILVERBEES.NS",
+    "name": "Silver BeES ETF",
+    "sector": "Commodity"
+  },
+  {
     "symbol": "^NSEI",
     "name": "Nifty 50",
     "sector": "Index"

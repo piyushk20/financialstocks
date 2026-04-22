@@ -7,7 +7,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid symbols" }, { status: 400 });
     }
 
-    const validSymbols = symbols.filter(sym => /^[A-Z0-9.\-_^]{1,20}$/i.test(sym));
+    const validSymbols = symbols.filter(sym => /^[A-Z0-9.\-_^=]{1,20}$/i.test(sym));
     if (validSymbols.length === 0) {
       return NextResponse.json({ error: "No valid symbols provided" }, { status: 400 });
     }

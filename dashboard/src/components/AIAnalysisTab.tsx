@@ -103,8 +103,9 @@ export function AIAnalysisTab({
       .replace(/'/g, "&#039;");
 
     return escapedText
+      .replace(/^[\s]*#### (.+)$/gm, '<h4 class="text-zinc-300 font-semibold text-xs mt-3 mb-1 uppercase tracking-wider">$1</h4>')
       .replace(/^[\s]*### (.+)$/gm, '<h3 class="text-violet-300 font-semibold text-sm mt-4 mb-2">$1</h3>')
-      .replace(/^[\s]*## (.+)$/gm, '<h2 class="text-zinc-100 font-bold mt-6 mb-3">$1</h2>')
+      .replace(/^[\s]*## (.+)$/gm, '<h2 class="text-zinc-100 font-bold mt-6 mb-3 border-b border-zinc-800 pb-1">$1</h2>')
       .replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
       .replace(/^[\s]*[-*] (.+)$/gm, '<div class="flex gap-2 ml-2 my-1"><span class="text-violet-500 mt-1">•</span><span class="text-zinc-300 text-sm">$1</span></div>')
       .replace(/\n\n/g, '<div class="h-3"></div>')

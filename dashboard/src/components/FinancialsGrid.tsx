@@ -14,6 +14,7 @@ interface FinancialsGridProps {
   loading: boolean;
   period: "annual" | "quarterly";
   onPeriodChange: (p: "annual" | "quarterly") => void;
+  isCommodity?: boolean;
 }
 
 function crore(n: number | null): string {
@@ -127,7 +128,19 @@ function CFTable({ rows }: { rows: CFRow[] }) {
   );
 }
 
-export function FinancialsGrid({ income, balance, cashflow, loading, period, onPeriodChange }: FinancialsGridProps) {
+export function FinancialsGrid({ income, balance, cashflow, loading, period, onPeriodChange, isCommodity }: FinancialsGridProps) {
+  if (!loading && isCommodity) {
+    return (
+      <div className="glass-card rounded-2xl p-10 flex flex-col items-center justify-center gap-4 text-center min-h-[200px]">
+        <div className="text-4xl">🪙</div>
+        <h3 className="text-zinc-200 font-semibold">Commodity / Futures Contract</h3>
+        <p className="text-zinc-500 text-sm max-w-sm">
+          Financial statements (Income, Balance Sheet, Cash Flow) are not applicable for commodities or futures contracts.
+          Use the <span className="text-violet-400">Technical Analysis</span> and <span className="text-violet-400">AI Analysis</span> tabs for price-action insights.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="glass-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">

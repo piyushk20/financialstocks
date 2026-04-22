@@ -14,6 +14,8 @@ import { AIAnalysisTab } from "@/components/AIAnalysisTab";
 import { Heatmap } from "@/components/Heatmap";
 import { MomentumBurstTab } from "@/components/MomentumBurstTab";
 import { WMACrossoverTab } from "@/components/WMACrossoverTab";
+import { VCPScannerTab } from "@/components/VCPScannerTab";
+import PivotLevelsTab from "@/components/PivotLevelsTab";
 import { NSE500 } from "@/data/nse500";
 import { BarChart3 } from "lucide-react";
 import { useEffect } from "react";
@@ -29,6 +31,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const savedSymbol = localStorage.getItem("dashboard_symbol");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedSymbol) setSymbol(savedSymbol);
     
     const savedPeriod = localStorage.getItem("dashboard_finPeriod");
@@ -36,7 +39,6 @@ export default function Dashboard() {
       setFinPeriod(savedPeriod);
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -204,10 +206,12 @@ export default function Dashboard() {
                   <TabsList className="bg-zinc-900/60 border border-zinc-800 px-1 py-1 h-auto mb-4 gap-1">
                     {[
                       { value: "financials", label: "Financials" },
+                      { value: "pivots", label: "🎯 Pivot Levels" },
                       { value: "news", label: "News" },
                       { value: "ai", label: "✦ AI Analysis" },
-                      { value: "momentum", label: "🚀 Momentum Burst" },
-                      { value: "wma", label: "📈 WMA 44 Scan" },
+                      { value: "vcp", label: "⚡ VCP & RS Scan" },
+                      { value: "momentum", label: "🚀 Momentum" },
+                      { value: "wma", label: "📈 WMA 44" },
                     ].map(({ value, label }) => (
                       <TabsTrigger
                         key={value}
@@ -227,6 +231,14 @@ export default function Dashboard() {
                       loading={finLoading}
                       period={finPeriod}
                       onPeriodChange={setFinPeriod}
+                      isCommodity={finData?.isCommodity}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="pivots">
+                    <PivotLevelsTab 
+                      pivots={techData?.pivots} 
+                      loading={techLoading} 
                     />
                   </TabsContent>
 
@@ -246,6 +258,10 @@ export default function Dashboard() {
                       cashflow={finData?.cashflow ?? []}
                       technicals={techData}
                     />
+                  </TabsContent>
+
+                  <TabsContent value="vcp">
+                    <VCPScannerTab onSelect={setSymbol} />
                   </TabsContent>
 
                   <TabsContent value="momentum">
