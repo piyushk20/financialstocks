@@ -25,6 +25,7 @@
 | 🎯 **Pivot Levels**     | Automated Standard Pivot Point calculation (P, R1, R2, S1, S2).             |
 | 📈 **WMA 44 & Momentum**| Specific strategies for Trend Following and Momentum Bursts.                |
 | 🔥 **NSE 500 Heatmap**  | Real-time relative performance of the top 500 Indian stocks.                |
+| 📰 **Live News Feed**   | Instant, zero-cache news fetching via Google News RSS integration.          |
 | 🤖 **AI Intelligence**  | Real-time analysis grounded in financials and technicals.                   |
 
 ---
@@ -70,6 +71,7 @@ NEXT_PUBLIC_POLL_INTERVAL_MS=30000
 - `GET /snapshot?ticker=RELIANCE.NS`: Real-time quote & metadata.
 - `GET /history?ticker=RELIANCE.NS`: OHLCV data for charts.
 - `GET /technicals?ticker=RELIANCE.NS`: RSI, MACD, Moving Averages, Pivots.
+- `GET /news?ticker=RELIANCE.NS`: Real-time stock-specific Google News RSS.
 - `POST /scan/vcp`: Batch Minervini scanner for Stocks or Commodities.
 
 ---

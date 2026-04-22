@@ -12,6 +12,8 @@ function tagSentiment(title: string): "POSITIVE" | "NEGATIVE" | "NEUTRAL" {
   return "NEUTRAL";
 }
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ symbol: string }> }
@@ -24,7 +26,7 @@ export async function GET(
   try {
     const res = await fetch(
       `${SIDECAR}/news?ticker=${encodeURIComponent(symbol)}`,
-      { next: { revalidate: 0 } }
+      { cache: 'no-store' }
     );
 
     if (!res.ok) {

@@ -171,7 +171,7 @@ def _get_news(ticker_sym: str) -> list:
     
     # Clean the ticker symbol for search query
     clean_ticker = ticker_sym.replace(".NS", "").replace(".BO", "").replace("^", "")
-    query = f"{clean_ticker}+NSE+stock+news"
+    query = f"{clean_ticker}+stock+when:14d"
     url = f"https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
     
     try:
