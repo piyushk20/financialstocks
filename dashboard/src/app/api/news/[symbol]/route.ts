@@ -24,7 +24,7 @@ export async function GET(
   try {
     const res = await fetch(
       `${SIDECAR}/news?ticker=${encodeURIComponent(symbol)}`,
-      { next: { revalidate: 300 } }
+      { next: { revalidate: 0 } }
     );
 
     if (!res.ok) {

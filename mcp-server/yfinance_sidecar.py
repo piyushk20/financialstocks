@@ -168,7 +168,7 @@ def _get_news(ticker_sym: str) -> list:
     t = yf.Ticker(ticker_sym)
     raw_news = t.news or []
     result = []
-    for item in raw_news[:15]:
+    for item in raw_news[:25]: # Fetch a bit more to sort safely
         ct = item.get("content", {})
         title = ct.get("title") or item.get("title", "")
         url = ct.get("canonicalUrl", {}).get("url") or item.get("link", "")
@@ -178,10 +178,11 @@ def _get_news(ticker_sym: str) -> list:
             "title": title,
             "url": url,
             "source": provider,
-            "published_at": str(published)[:10],
+            "published_at": str(published),
             "summary": ct.get("summary"),
         })
-    return result
+    result.sort(key=lambda x: x["published_at"], reverse=True)
+    return result[:15]
 
 
 import re
