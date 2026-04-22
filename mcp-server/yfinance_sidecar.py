@@ -16,7 +16,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import yfinance as yf
 import pandas as pd
-from fastapi import FastAPI, Query, HTTPException
+from pydantic import BaseModel
+import pandas_ta as ta
+from fastapi import FastAPI, Query, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="NSE Stock Sidecar", version="1.0.0")
@@ -238,6 +240,224 @@ async def news(ticker: str = Query(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class MomentumRequest(BaseModel):
+    symbols: list[str]
+    min_gain: float = 3.5
+    check_consolidation: bool = True
+    rsi_min: float = 45.0
+    rsi_max: float = 70.0
+    vol_surge: float = 1.5
+    check_sma50: bool = False
+    check_macd: bool = False
+    top_n: int = 50
+
+class WMARequest(BaseModel):
+    symbols: list[str]
+    top_n: int = 50
+
+def _scan_momentum(params: MomentumRequest) -> list:
+    if not params.symbols:
+        return []
+    
+    # Bulk download 3 months of data to ensure we have enough for 20-day MA and RSI
+    df = yf.download(
+        params.symbols, 
+        period="3mo", 
+        interval="1d", 
+        group_by="ticker", 
+        threads=True, 
+        auto_adjust=True,
+        progress=False
+    )
+    
+    results = []
+    
+    # If only one symbol is passed, yfinance returns a flat column structure instead of MultiIndex
+    is_multi = isinstance(df.columns, pd.MultiIndex)
+    
+    for symbol in params.symbols:
+        try:
+            if is_multi:
+                if symbol not in df.columns.levels[0]:
+                    continue
+                ticker_df = df[symbol].dropna(how="all")
+            else:
+                ticker_df = df.dropna(how="all")
+            
+            if len(ticker_df) < 30:
+                continue
+                
+            close = ticker_df["Close"]
+            high = ticker_df["High"]
+            low = ticker_df["Low"]
+            volume = ticker_df["Volume"]
+            
+            # Calculate technicals
+            rsi = ta.rsi(close, length=14)
+            sma20_vol = ta.sma(volume, length=20)
+            
+            sma50 = ta.sma(close, length=50) if params.check_sma50 else None
+            macd_df = ta.macd(close) if params.check_macd else None
+            
+            if rsi is None or rsi.empty or sma20_vol is None or sma20_vol.empty:
+                continue
+                
+            burst_found = False
+            match_data = None
+            
+            # Check for a burst on the current day or the previous 2 trading days
+            # We iterate backwards from -1 (today) to -3
+            for i in range(-1, -4, -1):
+                try:
+                    day_close = _safe_float(close.iloc[i])
+                    yday_close = _safe_float(close.iloc[i-1])
+                    day_vol = _safe_float(volume.iloc[i])
+                    avg_vol = _safe_float(sma20_vol.iloc[i-1])
+                    prev_rsi = _safe_float(rsi.iloc[i-1])
+                    
+                    if not all([day_close, yday_close, day_vol, avg_vol, prev_rsi]) or avg_vol == 0:
+                        continue
+                        
+                    gain_pct = ((day_close - yday_close) / yday_close) * 100
+                    
+                    if gain_pct < params.min_gain:
+                        continue
+                        
+                    if day_vol < (params.vol_surge * avg_vol):
+                        continue
+                        
+                    if not (params.rsi_min <= prev_rsi <= params.rsi_max):
+                        continue
+                        
+                    if params.check_sma50 and sma50 is not None:
+                        if day_close < _safe_float(sma50.iloc[i]):
+                            continue
+                            
+                    if params.check_macd and macd_df is not None:
+                        # Assuming default MACD columns: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
+                        # Check if MACD histogram is positive (bullish)
+                        macd_hist_col = [c for c in macd_df.columns if c.startswith('MACDh')][0]
+                        if _safe_float(macd_df[macd_hist_col].iloc[i]) <= 0:
+                            continue
+                        
+                    if params.check_consolidation:
+                        past_20_high = high.iloc[i-21:i-1].max()
+                        past_20_low = low.iloc[i-21:i-1].min()
+                        if past_20_low == 0:
+                            continue
+                        consolidation_range = ((past_20_high - past_20_low) / past_20_low) * 100
+                        if consolidation_range > 15.0:
+                            continue
+                            
+                    # Match found!
+                    # Get the date of the burst
+                    burst_date = str(ticker_df.index[i].date()) if hasattr(ticker_df.index[i], 'date') else str(ticker_df.index[i])
+                    
+                    # Store current price but metrics from the day of the burst
+                    match_data = {
+                        "symbol": symbol,
+                        "price": _safe_float(close.iloc[-1]), # Current price
+                        "change_percent": round(gain_pct, 2), # Gain on the day of burst
+                        "volume_surge": round(day_vol / avg_vol, 2), # Surge on day of burst
+                        "prev_rsi": round(prev_rsi, 2), # RSI prior to burst
+                        "burst_date": burst_date,
+                        "days_ago": abs(i) - 1 # 0 = today, 1 = yesterday, etc.
+                    }
+                    burst_found = True
+                    break # We found the most recent burst within the window, no need to check older ones
+                    
+                except IndexError:
+                    # If we don't have enough history for index `i`, just skip
+                    continue
+            
+            if burst_found and match_data:
+                results.append(match_data)
+            
+        except Exception as e:
+            print(f"Error processing {symbol}: {e}")
+            continue
+            
+    # Sort by highest gain
+    results.sort(key=lambda x: x["change_percent"], reverse=True)
+    return results[:params.top_n]
+
+@app.post("/momentum-burst")
+async def momentum_burst(req: MomentumRequest = Body(...)):
+    loop = asyncio.get_event_loop()
+    try:
+        matches = await loop.run_in_executor(executor, _scan_momentum, req)
+        return {"matches": matches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+def _scan_wma_crossover(params: WMARequest) -> list:
+    if not params.symbols:
+        return []
+    
+    df = yf.download(
+        params.symbols, 
+        period="4mo", 
+        interval="1d", 
+        group_by="ticker", 
+        threads=True, 
+        auto_adjust=True,
+        progress=False
+    )
+    
+    results = []
+    is_multi = isinstance(df.columns, pd.MultiIndex)
+    
+    for symbol in params.symbols:
+        try:
+            if is_multi:
+                if symbol not in df.columns.levels[0]: continue
+                ticker_df = df[symbol].dropna(how="all")
+            else:
+                ticker_df = df.dropna(how="all")
+            
+            if len(ticker_df) < 46: continue
+                
+            close = ticker_df["Close"]
+            wma44 = ta.wma(close, length=44)
+            
+            if wma44 is None or wma44.empty: continue
+                
+            # Check current day + past 3 days (4 total)
+            for i in range(-1, -5, -1):
+                day_close = _safe_float(close.iloc[i])
+                yday_close = _safe_float(close.iloc[i-1])
+                day_wma = _safe_float(wma44.iloc[i])
+                yday_wma = _safe_float(wma44.iloc[i-1])
+                
+                # Crossover logic: Yesterday below WMA, Today above WMA
+                if yday_close <= yday_wma and day_close > day_wma:
+                    burst_date = str(ticker_df.index[i])[:10]
+                    days_ago = abs(i + 1)
+                    
+                    results.append({
+                        "symbol": symbol,
+                        "price": _safe_float(close.iloc[-1]),
+                        "crossover_price": day_close,
+                        "wma_value": day_wma,
+                        "burst_date": burst_date,
+                        "days_ago": days_ago
+                    })
+                    break
+        except:
+            continue
+            
+    results.sort(key=lambda x: x["days_ago"])
+    return results[:params.top_n]
+
+@app.post("/wma44-crossover")
+async def wma44_crossover(req: WMARequest = Body(...)):
+    loop = asyncio.get_event_loop()
+    try:
+        matches = await loop.run_in_executor(executor, _scan_wma_crossover, req)
+        return {"matches": matches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health():

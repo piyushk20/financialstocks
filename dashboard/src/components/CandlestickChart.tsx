@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   ColorType,
@@ -18,20 +18,25 @@ interface CandlestickChartProps {
   sma20?: (number | null)[];
   sma50?: (number | null)[];
   sma200?: (number | null)[];
+  wma44?: (number | null)[];
   techDates?: string[];
   loading: boolean;
 }
+
+type TimeRange = "1M" | "3M" | "6M" | "1Y" | "2Y";
 
 export function CandlestickChart({
   data,
   sma20,
   sma50,
   sma200,
+  wma44,
   techDates,
   loading,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const [timeRange, setTimeRange] = useState<TimeRange>("6M");
 
   useEffect(() => {
     if (!containerRef.current || data.length === 0) return;
@@ -40,6 +45,23 @@ export function CandlestickChart({
       chartRef.current.remove();
       chartRef.current = null;
     }
+    
+    // Filter data by time range
+    let startIndex = 0;
+    if (timeRange !== "2Y" && data.length > 0) {
+      const lastDate = new Date(data[data.length - 1].time);
+      const cutoffDate = new Date(lastDate);
+      if (timeRange === "1M") cutoffDate.setMonth(cutoffDate.getMonth() - 1);
+      if (timeRange === "3M") cutoffDate.setMonth(cutoffDate.getMonth() - 3);
+      if (timeRange === "6M") cutoffDate.setMonth(cutoffDate.getMonth() - 6);
+      if (timeRange === "1Y") cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
+      
+      const cutoffTimeStr = cutoffDate.toISOString().split("T")[0];
+      startIndex = data.findIndex(d => d.time >= cutoffTimeStr);
+      if (startIndex === -1) startIndex = 0;
+    }
+    
+    const visibleData = data.slice(startIndex);
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -69,7 +91,7 @@ export function CandlestickChart({
       wickDownColor: "#ef4444",
     });
 
-    const candles = data.map((d) => ({
+    const candles = visibleData.map((d) => ({
       time: d.time as `${number}-${number}-${number}`,
       open: d.open,
       high: d.high,
@@ -112,6 +134,7 @@ export function CandlestickChart({
     if (sma20 && techDates) addSMA(sma20, techDates, "#60a5fa");
     if (sma50 && techDates) addSMA(sma50, techDates, "#f59e0b");
     if (sma200 && techDates) addSMA(sma200, techDates, "#a78bfa");
+    if (wma44 && techDates) addSMA(wma44, techDates, "#ec4899"); // Pink for WMA44
 
     // Volume histogram (v5 API)
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -123,7 +146,7 @@ export function CandlestickChart({
       scaleMargins: { top: 0.8, bottom: 0 },
     });
     volumeSeries.setData(
-      data.map((d) => ({
+      visibleData.map((d) => ({
         time: d.time as `${number}-${number}-${number}`,
         value: d.volume ?? 0,
         color: d.close >= d.open ? "#22c55e30" : "#ef444430",
@@ -143,7 +166,7 @@ export function CandlestickChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, sma20, sma50, sma200, techDates]);
+  }, [data, sma20, sma50, sma200, wma44, techDates, timeRange]);
 
   if (loading) {
     return <Skeleton className="w-full h-[340px] rounded-2xl bg-zinc-800" />;
@@ -151,29 +174,54 @@ export function CandlestickChart({
 
   return (
     <div className="glass-card rounded-2xl p-4">
-      <div className="flex items-center gap-4 mb-3 text-[11px] font-medium">
-        <span className="text-zinc-400">SMA:</span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-[#60a5fa] inline-block rounded" />
-          <span className="text-zinc-300">20d:</span>
-          <span className="text-blue-400 font-mono">
-            {sma20?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium">
+          <span className="text-zinc-400">Indicators:</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-[#60a5fa] inline-block rounded" />
+            <span className="text-zinc-300">SMA20:</span>
+            <span className="text-blue-400 font-mono">
+              {sma20?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+            </span>
           </span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-[#f59e0b] inline-block rounded" />
-          <span className="text-zinc-300">50d:</span>
-          <span className="text-amber-400 font-mono">
-            {sma50?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-[#ec4899] inline-block rounded" />
+            <span className="text-zinc-300">WMA44:</span>
+            <span className="text-pink-400 font-mono">
+              {wma44?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+            </span>
           </span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-[#a78bfa] inline-block rounded" />
-          <span className="text-zinc-300">200d:</span>
-          <span className="text-violet-400 font-mono">
-            {sma200?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-[#f59e0b] inline-block rounded" />
+            <span className="text-zinc-300">SMA50:</span>
+            <span className="text-amber-400 font-mono">
+              {sma50?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+            </span>
           </span>
-        </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-[#a78bfa] inline-block rounded" />
+            <span className="text-zinc-300">SMA200:</span>
+            <span className="text-violet-400 font-mono">
+              {sma200?.filter(v => v != null).at(-1)?.toFixed(2) ?? "—"}
+            </span>
+          </span>
+        </div>
+        
+        <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 shrink-0 self-start sm:self-auto">
+          {(["1M", "3M", "6M", "1Y", "2Y"] as TimeRange[]).map((range) => (
+            <button
+              key={range}
+              onClick={() => setTimeRange(range)}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                timeRange === range
+                  ? "bg-violet-500/20 text-violet-300"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+              }`}
+            >
+              {range}
+            </button>
+          ))}
+        </div>
       </div>
       <div ref={containerRef} className="w-full overflow-hidden" />
     </div>

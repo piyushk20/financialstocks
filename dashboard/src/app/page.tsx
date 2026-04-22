@@ -12,6 +12,8 @@ import { NewsFeed } from "@/components/NewsFeed";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { AIAnalysisTab } from "@/components/AIAnalysisTab";
 import { Heatmap } from "@/components/Heatmap";
+import { MomentumBurstTab } from "@/components/MomentumBurstTab";
+import { WMACrossoverTab } from "@/components/WMACrossoverTab";
 import { NSE500 } from "@/data/nse500";
 import { BarChart3 } from "lucide-react";
 import { useEffect } from "react";
@@ -177,6 +179,7 @@ export default function Dashboard() {
                       sma20={techData?.sma20}
                       sma50={techData?.sma50}
                       sma200={techData?.sma200}
+                      wma44={techData?.wma44}
                       techDates={techData?.dates}
                       loading={stockLoading}
                     />
@@ -203,6 +206,8 @@ export default function Dashboard() {
                       { value: "financials", label: "Financials" },
                       { value: "news", label: "News" },
                       { value: "ai", label: "✦ AI Analysis" },
+                      { value: "momentum", label: "🚀 Momentum Burst" },
+                      { value: "wma", label: "📈 WMA 44 Scan" },
                     ].map(({ value, label }) => (
                       <TabsTrigger
                         key={value}
@@ -241,6 +246,14 @@ export default function Dashboard() {
                       cashflow={finData?.cashflow ?? []}
                       technicals={techData}
                     />
+                  </TabsContent>
+
+                  <TabsContent value="momentum">
+                    <MomentumBurstTab onSelect={setSymbol} />
+                  </TabsContent>
+
+                  <TabsContent value="wma">
+                    <WMACrossoverTab onSelect={setSymbol} />
                   </TabsContent>
                 </Tabs>
               </motion.div>

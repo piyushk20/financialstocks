@@ -36,6 +36,21 @@ function computeSMA(closes: number[], period: number): (number | null)[] {
   });
 }
 
+function computeWMA(closes: number[], period: number): (number | null)[] {
+  const wma: (number | null)[] = new Array(closes.length).fill(null);
+  const denominator = (period * (period + 1)) / 2;
+  
+  for (let i = period - 1; i < closes.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) {
+      const weight = j + 1;
+      sum += closes[i - period + 1 + j] * weight;
+    }
+    wma[i] = sum / denominator;
+  }
+  return wma;
+}
+
 function computeEMA(closes: number[], period: number): number[] {
   const ema: number[] = [];
   const k = 2 / (period + 1);
@@ -80,6 +95,7 @@ export async function GET(
     const sma20 = computeSMA(closes, 20);
     const sma50 = computeSMA(closes, 50);
     const sma200 = computeSMA(closes, 200);
+    const wma44 = computeWMA(closes, 44);
 
     const ema20 = computeEMA(closes, 20);
     const ema50 = computeEMA(closes, 50);
@@ -120,6 +136,7 @@ export async function GET(
       sma20,
       sma50,
       sma200,
+      wma44,
       ema20,
       ema50,
       ema200,
