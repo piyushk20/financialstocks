@@ -25,7 +25,7 @@ app = FastAPI(title="NSE Stock Sidecar", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -229,6 +229,27 @@ async def snapshot(ticker: str = Query(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/snapshot/batch")
+async def snapshot_batch(req: list[str] = Body(...)):
+    loop = asyncio.get_event_loop()
+    try:
+        # Use existing _get_snapshot in parallel via executor
+        def _get_all(tickers):
+            res = {}
+            for t in tickers:
+                try:
+                    res[t] = _get_snapshot(t)
+                except:
+                    res[t] = {"change_percent": 0}
+            return res
+            
+        data = await loop.run_in_executor(executor, _get_all, req)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @app.get("/history")
 async def history(
     ticker: str = Query(...),
@@ -286,6 +307,17 @@ class WMARequest(BaseModel):
 class VCPRequest(BaseModel):
     symbols: list[str]
     index_symbol: str = "^NSEI"
+    top_n: int = 50
+
+class EPRequest(BaseModel):
+    symbols: list[str]
+    top_n: int = 50
+
+class ORBRequest(BaseModel):
+    symbols: list[str]
+    volume_multiplier: float = 1.5
+    max_range_atr_ratio: float = 2.0
+    min_rr: float = 1.5
     top_n: int = 50
 
 def _scan_momentum(params: MomentumRequest) -> list:
@@ -452,8 +484,9 @@ def _scan_wma_crossover(params: WMARequest) -> list:
                 
             close = ticker_df["Close"]
             wma44 = ta.wma(close, length=44)
+            rsi14 = ta.rsi(close, length=14)
             
-            if wma44 is None or wma44.empty: continue
+            if wma44 is None or wma44.empty or rsi14 is None or rsi14.empty: continue
                 
             # Check current day + past 3 days (4 total)
             for i in range(-1, -5, -1):
@@ -461,9 +494,10 @@ def _scan_wma_crossover(params: WMARequest) -> list:
                 yday_close = _safe_float(close.iloc[i-1])
                 day_wma = _safe_float(wma44.iloc[i])
                 yday_wma = _safe_float(wma44.iloc[i-1])
+                day_rsi = _safe_float(rsi14.iloc[i])
                 
-                # Crossover logic: Yesterday below WMA, Today above WMA
-                if yday_close <= yday_wma and day_close > day_wma:
+                # Crossover logic: Yesterday below WMA, Today above WMA, and Today RSI > 50
+                if yday_close <= yday_wma and day_close > day_wma and day_rsi > 50:
                     burst_date = str(ticker_df.index[i])[:10]
                     days_ago = abs(i + 1)
                     
@@ -472,6 +506,7 @@ def _scan_wma_crossover(params: WMARequest) -> list:
                         "price": _safe_float(close.iloc[-1]),
                         "crossover_price": day_close,
                         "wma_value": day_wma,
+                        "rsi_value": round(day_rsi, 2),
                         "burst_date": burst_date,
                         "days_ago": days_ago
                     })
@@ -518,7 +553,9 @@ def _process_vcp_batch(symbols_batch, index_symbol):
     is_multi = isinstance(df.columns, pd.MultiIndex)
     
     # Get index
+    index_close = None
     try:
+
         if is_multi:
             if index_symbol in df.columns.levels[0]:
                 idx_df = df[index_symbol].dropna(how="all")
@@ -662,6 +699,127 @@ async def vcp_scanner(req: VCPRequest = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _scan_ep(params: EPRequest) -> list:
+    if not params.symbols:
+        return []
+    
+    # Download 1 year of data for SMAs and 52W High
+    try:
+        df = yf.download(
+            params.symbols,
+            period="1y",
+            interval="1d",
+            group_by="ticker",
+            threads=True,
+            auto_adjust=True,
+            progress=False,
+            timeout=30
+        )
+    except Exception as e:
+        print(f"EP Scan Download Error: {e}")
+        return []
+
+    results = []
+    is_multi = isinstance(df.columns, pd.MultiIndex)
+    
+    for symbol in params.symbols:
+        try:
+            if is_multi:
+                if symbol not in df.columns.levels[0]: continue
+                ticker_df = df[symbol].dropna(how="all")
+            else:
+                ticker_df = df.dropna(how="all")
+            
+            if len(ticker_df) < 150: continue
+                
+            close = ticker_df["Close"]
+            high = ticker_df["High"]
+            low = ticker_df["Low"]
+            open_ = ticker_df["Open"]
+            volume = ticker_df["Volume"]
+            
+            # Indicators
+            sma50 = ta.sma(close, length=50)
+            sma150 = ta.sma(close, length=150)
+            sma200 = ta.sma(close, length=200)
+            vol_avg20 = ta.sma(volume, length=20)
+            
+            p = _safe_float(close.iloc[-1])
+            if not p: continue
+            
+            s50 = _safe_float(sma50.iloc[-1]) if sma50 is not None else None
+            s150 = _safe_float(sma150.iloc[-1]) if sma150 is not None else None
+            s200 = _safe_float(sma200.iloc[-1]) if sma200 is not None else None
+            
+            # Stage 2 check
+            is_stage2 = False
+            if s150 and s200:
+                is_stage2 = bool(p > s150 > s200)
+            
+            # EP burst check (last 3 days)
+            burst_found = False
+            match_data = None
+            
+            for i in range(-1, -4, -1):
+                try:
+                    d_close = _safe_float(close.iloc[i])
+                    y_close = _safe_float(close.iloc[i-1])
+                    d_open = _safe_float(open_.iloc[i])
+                    d_vol = _safe_float(volume.iloc[i])
+                    avg_vol = _safe_float(vol_avg20.iloc[i-1])
+                    
+                    if not all([d_close, y_close, d_open, d_vol, avg_vol]) or avg_vol == 0:
+                        continue
+                        
+                    gap_pct = ((d_open - y_close) / y_close) * 100
+                    rvol = d_vol / avg_vol
+                    
+                    if gap_pct >= 8.0 and rvol >= 2.5:
+                        # 52W high proximity
+                        high_52w = float(high.iloc[-252:].max())
+                        dist_52w = ((high_52w - p) / p) * 100
+                        
+                        # Scoring (0-100)
+                        score = 20.0 # Base
+                        score += min(30, (gap_pct - 8) * 2)
+                        score += min(30, (rvol - 2.5) * 5)
+                        if is_stage2: score += 10
+                        if dist_52w < 10: score += 10
+                        
+                        match_data = {
+                            "symbol": symbol,
+                            "price": round(p, 2),
+                            "gap_pct": round(gap_pct, 2),
+                            "rvol": round(rvol, 2),
+                            "is_stage2": is_stage2,
+                            "dist_52w": round(dist_52w, 2),
+                            "score": round(min(100, score), 1),
+                            "burst_date": str(ticker_df.index[i].date()) if hasattr(ticker_df.index[i], 'date') else str(ticker_df.index[i])[:10],
+                            "days_ago": abs(i) - 1
+                        }
+                        burst_found = True
+                        break
+                except:
+                    continue
+            
+            if burst_found and match_data:
+                results.append(match_data)
+        except:
+            continue
+            
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:params.top_n]
+
+@app.post("/ep-scanner")
+async def ep_scanner(req: EPRequest = Body(...)):
+    loop = asyncio.get_event_loop()
+    try:
+        matches = await loop.run_in_executor(executor, _scan_ep, req)
+        return {"matches": matches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.post("/wma44-crossover")
 
@@ -673,6 +831,161 @@ async def wma44_crossover(req: WMARequest = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _process_orb_single(symbol: str, include_history: bool = False, vol_mult: float = 1.5) -> dict:
+    t = yf.Ticker(symbol)
+    df = t.history(period="5d", interval="15m", auto_adjust=True)
+    if df.empty:
+        return {"symbol": symbol, "error": "No data available"}
+    
+    df = df.sort_index()
+    close = df["Close"]
+    high = df["High"]
+    low = df["Low"]
+    volume = df["Volume"]
+    
+    atr_series = ta.atr(high, low, close, length=14)
+    ema9_series = ta.ema(close, length=9)
+    vol_sma_series = ta.sma(volume, length=20)
+    
+    tp = (high + low + close) / 3
+    dates = df.index.map(lambda x: x.date() if hasattr(x, 'date') else str(x)[:10])
+    df["typical_vol"] = tp * volume
+    vwap_series = df.groupby(dates, group_keys=False).apply(
+        lambda g: g["typical_vol"].cumsum() / (g["Volume"].cumsum() + 1e-9)
+    )
+    
+    today_str = dates[-1]
+    today_df = df[dates == today_str]
+    if today_df.empty or len(today_df) < 1:
+        return {"symbol": symbol, "error": "No today data"}
+        
+    first_candle = today_df.iloc[0]
+    orb_high = _safe_float(first_candle["High"]) or 0
+    orb_low = _safe_float(first_candle["Low"]) or 0
+    orb_size = round(orb_high - orb_low, 2)
+    orb_mid = round((orb_high + orb_low) / 2, 2)
+    
+    ltp = _safe_float(close.iloc[-1]) or 0
+    cur_vol = _safe_float(volume.iloc[-1]) or 0
+    cur_vwap = _safe_float(vwap_series.iloc[-1]) or 0
+    cur_ema9 = _safe_float(ema9_series.iloc[-1]) or 0 if ema9_series is not None else 0
+    cur_atr = _safe_float(atr_series.iloc[-1]) or 0 if atr_series is not None else 0
+    cur_vol_avg = _safe_float(vol_sma_series.iloc[-1]) or 0 if vol_sma_series is not None else 0
+    
+    if ltp > orb_high:
+        direction = "LONG"
+    elif ltp < orb_low:
+        direction = "SHORT"
+    else:
+        direction = "NONE"
+        
+    vwap_ok = bool((direction == "LONG" and ltp > cur_vwap) or (direction == "SHORT" and ltp < cur_vwap))
+    volume_ok = bool(cur_vol >= (cur_vol_avg * vol_mult))
+    ema9_ok = bool((direction == "LONG" and ltp > cur_ema9) or (direction == "SHORT" and ltp < cur_ema9))
+    range_width_ok = bool(cur_atr > 0 and (orb_size / (cur_atr + 1e-5)) <= 2.5)
+    
+    levels = None
+    if direction == "LONG":
+        entry = orb_high
+        sl = orb_low
+        tp1 = round(entry + orb_size, 2)
+        tp2 = round(entry + (2 * orb_size), 2)
+        rr = round((tp1 - entry) / (entry - sl + 1e-5), 2)
+        levels = {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "rr_ratio": rr, "sl_pts": orb_size, "sl_pct": round((orb_size/(entry+1e-5))*100, 2), "direction": direction}
+    elif direction == "SHORT":
+        entry = orb_low
+        sl = orb_high
+        tp1 = round(entry - orb_size, 2)
+        tp2 = round(entry - (2 * orb_size), 2)
+        rr = round((entry - tp1) / (sl - entry + 1e-5), 2)
+        levels = {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "rr_ratio": rr, "sl_pts": orb_size, "sl_pct": round((orb_size/(entry+1e-5))*100, 2), "direction": direction}
+        
+    strength = (1 if direction != "NONE" else 0) + (1 if vwap_ok else 0) + (1 if volume_ok else 0) + (1 if ema9_ok else 0) + (1 if range_width_ok else 0)
+    
+    res = {
+        "symbol": symbol,
+        "name": symbol.replace(".NS", ""),
+        "ltp": ltp,
+        "direction": direction,
+        "signal_strength": strength,
+        "orb": {
+            "high": orb_high,
+            "low": orb_low,
+            "size": orb_size,
+            "midpoint": orb_mid,
+            "avg_volume": round(cur_vol_avg, 0)
+        },
+        "filters": {
+            "vwap_ok": vwap_ok,
+            "volume_ok": volume_ok,
+            "ema9_ok": ema9_ok,
+            "range_width_ok": range_width_ok
+        },
+        "vwap": round(cur_vwap, 2),
+        "ema9": round(cur_ema9, 2),
+        "atr": round(cur_atr, 2),
+        "entry_method": "breakout",
+        "levels": levels,
+        "error": None
+    }
+    
+    if include_history:
+        history = []
+        for idx in df.index:
+            history.append({
+                "time": str(idx)[:19],
+                "open": _safe_float(df.loc[idx, "Open"]),
+                "high": _safe_float(df.loc[idx, "High"]),
+                "low": _safe_float(df.loc[idx, "Low"]),
+                "close": _safe_float(df.loc[idx, "Close"]),
+                "volume": int(df.loc[idx, "Volume"]),
+                "vwap": round(_safe_float(vwap_series.loc[idx]) or 0, 2),
+                "ema9": round(_safe_float(ema9_series.loc[idx]) or 0 if ema9_series is not None else 0, 2)
+            })
+        res["history"] = history
+        
+    return res
+
+def _scan_orb(params: ORBRequest) -> list:
+    if not params.symbols:
+        return []
+        
+    results = []
+    futures = [executor.submit(_process_orb_single, sym, False, params.volume_multiplier) for sym in params.symbols]
+    for f in futures:
+        try:
+            r = f.result(timeout=10)
+            if not r.get("error"):
+                results.append(r)
+        except Exception:
+            continue
+            
+    results.sort(key=lambda x: (x["signal_strength"], 1 if x["direction"] != "NONE" else 0), reverse=True)
+    return results[:params.top_n]
+
+@app.post("/orb-scanner")
+async def orb_scanner(req: ORBRequest = Body(...)):
+    loop = asyncio.get_event_loop()
+    try:
+        matches = await loop.run_in_executor(executor, _scan_orb, req)
+        return {"matches": matches}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/intraday")
+async def intraday(ticker: str = Query(...)):
+    _validate_ticker(ticker)
+    loop = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(executor, _process_orb_single, ticker, True, 1.5)
+        if data.get("error"):
+            raise HTTPException(status_code=400, detail=data["error"])
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
@@ -680,4 +993,4 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=8015, log_level="info")

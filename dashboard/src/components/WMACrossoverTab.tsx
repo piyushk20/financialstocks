@@ -17,6 +17,7 @@ interface Match {
   price: number;
   crossover_price: number;
   wma_value: number;
+  rsi_value?: number;
   burst_date: string;
   days_ago: number;
 }
@@ -102,7 +103,7 @@ export function WMACrossoverTab({ onSelect }: { onSelect?: (symbol: string) => v
           {loading ? (
             <><Activity className="w-4 h-4 animate-spin" /> Scanning...</>
           ) : (
-            <><Search className="w-4 h-4" /> Run WMA Scan</>
+            <><Search className="w-4 h-4" /> Run WMA + RSI Scan</>
           )}
         </button>
       </div>
@@ -126,7 +127,7 @@ export function WMACrossoverTab({ onSelect }: { onSelect?: (symbol: string) => v
               className="flex flex-col items-center justify-center py-20 text-zinc-500"
             >
               <Activity className="w-12 h-12 mb-4 opacity-20" />
-              <p className="text-sm lowercase tracking-tighter">No WMA 44 crossovers detected in selected universe</p>
+              <p className="text-sm lowercase tracking-tighter">No WMA 44 + RSI &gt; 50 crossovers detected in selected universe</p>
             </motion.div>
           )}
 
@@ -175,11 +176,17 @@ export function WMACrossoverTab({ onSelect }: { onSelect?: (symbol: string) => v
 
                     <div className="h-px bg-zinc-800/50" />
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-2">
                       <div className="space-y-1">
                         <p className="text-[10px] text-zinc-500 lowercase tracking-tighter">WMA 44</p>
                         <p className="text-xs font-mono font-bold text-pink-400">
                           {match.wma_value.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="space-y-1 text-center">
+                        <p className="text-[10px] text-zinc-500 lowercase tracking-tighter">RSI</p>
+                        <p className="text-xs font-mono font-bold text-violet-400">
+                          {match.rsi_value ? match.rsi_value.toFixed(1) : "—"}
                         </p>
                       </div>
                       <div className="space-y-1 text-right">

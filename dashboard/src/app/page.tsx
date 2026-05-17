@@ -15,6 +15,8 @@ import { Heatmap } from "@/components/Heatmap";
 import { MomentumBurstTab } from "@/components/MomentumBurstTab";
 import { WMACrossoverTab } from "@/components/WMACrossoverTab";
 import { VCPScannerTab } from "@/components/VCPScannerTab";
+import { EPScannerTab } from "@/components/EPScannerTab";
+import { ORBScannerTab } from "@/components/ORBScannerTab";
 import PivotLevelsTab from "@/components/PivotLevelsTab";
 import { NSE500 } from "@/data/nse500";
 import { BarChart3 } from "lucide-react";
@@ -210,6 +212,8 @@ export default function Dashboard() {
                       { value: "news", label: "News" },
                       { value: "ai", label: "✦ AI Analysis" },
                       { value: "vcp", label: "⚡ VCP & RS Scan" },
+                      { value: "ep", label: "🔥 EP Scanner" },
+                      { value: "orb", label: "⏱️ 15m ORB" },
                       { value: "momentum", label: "🚀 Momentum" },
                       { value: "wma", label: "📈 WMA 44" },
                     ].map(({ value, label }) => (
@@ -262,6 +266,14 @@ export default function Dashboard() {
 
                   <TabsContent value="vcp">
                     <VCPScannerTab onSelect={setSymbol} />
+                  </TabsContent>
+
+                  <TabsContent value="ep">
+                    <EPScannerTab onSelect={setSymbol} />
+                  </TabsContent>
+
+                  <TabsContent value="orb">
+                    <ORBScannerTab onSelect={setSymbol} />
                   </TabsContent>
 
                   <TabsContent value="momentum">
