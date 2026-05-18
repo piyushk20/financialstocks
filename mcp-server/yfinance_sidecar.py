@@ -895,14 +895,14 @@ def _process_orb_single(symbol: str, include_history: bool = False, vol_mult: fl
         sl = orb_low
         tp1 = round(entry + orb_size, 2)
         tp2 = round(entry + (2 * orb_size), 2)
-        rr = round((tp1 - entry) / (entry - sl + 1e-5), 2)
+        rr = round((tp2 - entry) / (entry - sl + 1e-5), 2)
         levels = {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "rr_ratio": rr, "sl_pts": orb_size, "sl_pct": round((orb_size/(entry+1e-5))*100, 2), "direction": direction}
     elif direction == "SHORT":
         entry = orb_low
         sl = orb_high
         tp1 = round(entry - orb_size, 2)
         tp2 = round(entry - (2 * orb_size), 2)
-        rr = round((entry - tp1) / (sl - entry + 1e-5), 2)
+        rr = round((entry - tp2) / (sl - entry + 1e-5), 2)
         levels = {"entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2, "rr_ratio": rr, "sl_pts": orb_size, "sl_pct": round((orb_size/(entry+1e-5))*100, 2), "direction": direction}
         
     strength = (1 if direction != "NONE" else 0) + (1 if vwap_ok else 0) + (1 if volume_ok else 0) + (1 if ema9_ok else 0) + (1 if range_width_ok else 0)

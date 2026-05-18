@@ -67,7 +67,7 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
   const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "sectoral">("nifty50");
   const [volMult, setVolMult] = useState(1.5);
   const [maxRangeAtr, setMaxRangeAtr] = useState(2.0);
-  const [minRr, setMinRr] = useState(1.5);
+  const [minRr, setMinRr] = useState(1.0);
   const [topN, setTopN] = useState(50);
 
   // Selected symbol for Intraday Chart
