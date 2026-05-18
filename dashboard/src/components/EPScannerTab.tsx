@@ -62,7 +62,7 @@ export function EPScannerTab({ onSelect }: { onSelect?: (symbol: string) => void
             Episodic Pivot (EP) Scanner
           </h2>
           <p className="text-sm text-zinc-400 mt-1">
-            Identifying high-probability momentum bursts based on Gap-ups (≥8%), high relative volume (≥2.5x), and Stage 2 uptrends.
+            Identifying high-probability momentum bursts based on Gap-ups / Surges (≥3.5%), high relative volume (≥1.2x - 1.7x), and Stage 2 uptrends.
           </p>
         </div>
         
