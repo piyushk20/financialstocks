@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const SIDECAR = "http://127.0.0.1:8001";
+const SIDECAR = "http://127.0.0.1:8015";
 
 const POSITIVE_TERMS = ["surge", "profit", "beat", "growth", "record", "rise", "gain", "strong", "positive", "up"];
 const NEGATIVE_TERMS = ["fall", "loss", "miss", "decline", "concern", "risk", "drop", "down", "weak", "cut"];

@@ -18,7 +18,7 @@
 | 🎯 **15-Minute ORB Scanner**     | Opening Range Breakout strategy with VWAP, EMA9, volume confluence filters, and auto-calculated trade levels (Entry/SL/TP1/TP2/R:R). |
 | 📊 **Intraday Chart Viewer**     | 15m candlestick charts with VWAP, EMA9, and ORB High/Low overlays via lightweight-charts. Dropdown stock selector from NSE 500. |
 | 🔄 **WMA 44 + RSI Crossover**    | Detects stocks crossing above 44-period Weighted Moving Average with RSI > 50 confirmation. |
-| 🚀 **EP (Earnings Power) Scanner** | Detects gap-up momentum events (≥8% gap, ≥2.5x RVOL) with Stage 2 trend and 52W high proximity scoring. |
+| 🚀 **EP (Earnings Power) Scanner** | Detects gap-up / surge momentum events (≥3.5% move, ≥1.2x-1.7x RVOL) with Stage 2 trend and 52W high proximity scoring. |
 | 📦 **Commodities**               | Native support for global commodities (GC=F, SI=F, CL=F).                  |
 | 🎯 **Pivot Levels**              | Automated Standard Pivot Point calculation (P, R1, R2, S1, S2).            |
 | 🔥 **NSE 500 Heatmap**           | Real-time relative performance of the top 500 Indian stocks.               |

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const SIDECAR = "http://127.0.0.1:8001";
+const SIDECAR = "http://127.0.0.1:8015";
 
 /* ── Technical indicator math ── */
 

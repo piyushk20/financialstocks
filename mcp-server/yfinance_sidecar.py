@@ -11,7 +11,7 @@ Endpoints:
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
 import yfinance as yf
@@ -756,11 +756,11 @@ def _scan_ep(params: EPRequest) -> list:
             if s150 and s200:
                 is_stage2 = bool(p > s150 > s200)
             
-            # EP burst check (last 3 days)
+            # EP burst check (last 5 days)
             burst_found = False
             match_data = None
             
-            for i in range(-1, -4, -1):
+            for i in range(-1, -6, -1):
                 try:
                     d_close = _safe_float(close.iloc[i])
                     y_close = _safe_float(close.iloc[i-1])
@@ -771,29 +771,34 @@ def _scan_ep(params: EPRequest) -> list:
                     if not all([d_close, y_close, d_open, d_vol, avg_vol]) or avg_vol == 0:
                         continue
                         
-                    gap_pct = ((d_open - y_close) / y_close) * 100
-                    rvol = d_vol / avg_vol
+                    gap_open_pct = ((d_open - y_close) / y_close) * 100
+                    day_gain_pct = ((d_close - y_close) / y_close) * 100
+                    ep_move = max(gap_open_pct, day_gain_pct)
+                    rvol = round(d_vol / avg_vol, 2)
                     
-                    if gap_pct >= 8.0 and rvol >= 2.5:
+                    # If i == -1 (today live), volume is still accumulating, so relax rvol threshold
+                    min_rvol = 1.2 if i == -1 else 1.7
+                    
+                    if ep_move >= 3.5 and rvol >= min_rvol:
                         # 52W high proximity
                         high_52w = float(high.iloc[-252:].max())
                         dist_52w = ((high_52w - p) / p) * 100
                         
                         # Scoring (0-100)
-                        score = 20.0 # Base
-                        score += min(30, (gap_pct - 8) * 2)
-                        score += min(30, (rvol - 2.5) * 5)
-                        if is_stage2: score += 10
-                        if dist_52w < 10: score += 10
+                        score = 40.0 # Base
+                        score += min(30.0, (ep_move - 3.5) * 4.0)
+                        score += min(30.0, (rvol - min_rvol) * 10.0)
+                        if is_stage2: score += 15.0
+                        if dist_52w < 15.0: score += 15.0
                         
                         match_data = {
                             "symbol": symbol,
                             "price": round(p, 2),
-                            "gap_pct": round(gap_pct, 2),
-                            "rvol": round(rvol, 2),
+                            "gap_pct": round(ep_move, 2),
+                            "rvol": rvol,
                             "is_stage2": is_stage2,
                             "dist_52w": round(dist_52w, 2),
-                            "score": round(min(100, score), 1),
+                            "score": round(min(100.0, score), 1),
                             "burst_date": str(ticker_df.index[i].date()) if hasattr(ticker_df.index[i], 'date') else str(ticker_df.index[i])[:10],
                             "days_ago": abs(i) - 1
                         }
@@ -946,7 +951,7 @@ def _process_orb_single(symbol: str, include_history: bool = False, vol_mult: fl
         
     return res
 
-def _scan_orb(params: ORBRequest) -> list:
+def _scan_orb(params: ORBRequest, is_market_open: bool = True) -> list:
     if not params.symbols:
         return []
         
@@ -956,7 +961,11 @@ def _scan_orb(params: ORBRequest) -> list:
         try:
             r = f.result(timeout=10)
             if not r.get("error"):
-                results.append(r)
+                if not is_market_open:
+                    if r["direction"] != "NONE":
+                        results.append(r)
+                else:
+                    results.append(r)
         except Exception:
             continue
             
@@ -965,10 +974,25 @@ def _scan_orb(params: ORBRequest) -> list:
 
 @app.post("/orb-scanner")
 async def orb_scanner(req: ORBRequest = Body(...)):
+    now_utc = datetime.utcnow()
+    ist_offset = timedelta(hours=5, minutes=30)
+    now_ist = now_utc + ist_offset
+    
+    # IST Market Hours: Mon-Fri (weekday < 5), 9:15 AM to 3:30 PM
+    is_market_open = (now_ist.weekday() < 5) and (
+        (now_ist.hour == 9 and now_ist.minute >= 15) or 
+        (9 < now_ist.hour < 15) or 
+        (now_ist.hour == 15 and now_ist.minute <= 30)
+    )
+    
     loop = asyncio.get_event_loop()
     try:
-        matches = await loop.run_in_executor(executor, _scan_orb, req)
-        return {"matches": matches}
+        matches = await loop.run_in_executor(executor, _scan_orb, req, is_market_open)
+        return {
+            "matches": matches,
+            "is_market_open": is_market_open,
+            "timestamp": now_ist.strftime("%Y-%m-%d %H:%M:%S IST")
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

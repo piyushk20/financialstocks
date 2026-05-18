@@ -17,7 +17,7 @@ Write-Host "  ──────────────────────
 Write-Host ""
 
 # Start yfinance sidecar in a new window
-Write-Host " Starting yfinance sidecar on port 8001..." -ForegroundColor Yellow
+Write-Host " Starting yfinance sidecar on port 8015..." -ForegroundColor Yellow
 $sidecar = Start-Process powershell -ArgumentList `
     "-NoExit -Command `"Set-Location '$sidecarDir'; $uv run python yfinance_sidecar.py`"" `
     -PassThru
@@ -25,7 +25,7 @@ $sidecar = Start-Process powershell -ArgumentList `
 Start-Sleep -Seconds 3
 
 # Start Next.js dev server in a new window
-Write-Host " Starting Next.js dashboard on port 3000..." -ForegroundColor Yellow
+Write-Host " Starting Next.js dashboard on port 3015..." -ForegroundColor Yellow
 $dashboard = Start-Process powershell -ArgumentList `
     "-NoExit -Command `"Set-Location '$dashDir'; npm run dev`"" `
     -PassThru
@@ -33,8 +33,8 @@ $dashboard = Start-Process powershell -ArgumentList `
 Start-Sleep -Seconds 4
 
 Write-Host ""
-Write-Host " Dashboard:  http://localhost:3000" -ForegroundColor Green
-Write-Host " Sidecar:    http://127.0.0.1:8001/docs" -ForegroundColor Green
+Write-Host " Dashboard:  http://localhost:3015" -ForegroundColor Green
+Write-Host " Sidecar:    http://127.0.0.1:8015/docs" -ForegroundColor Green
 Write-Host ""
 Write-Host " Press Enter to stop both servers..." -ForegroundColor DarkGray
 $null = Read-Host

@@ -15,20 +15,39 @@ export async function POST(req: Request) {
     // Proxy to sidecar's batch price endpoint if exists, 
     // or fetch individually in parallel for now.
     // The sidecar has a snapshot endpoint that takes a ticker.
-    const SIDECAR_URL = "http://127.0.0.1:8001";
+    const SIDECAR_URL = "http://127.0.0.1:8015";
     
+    try {
+      const res = await fetch(`${SIDECAR_URL}/snapshot/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validSymbols),
+        next: { revalidate: 30 }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        return NextResponse.json(data);
+      }
+    } catch (err) {
+      console.error("Batch snapshot failed, falling back to individual fetches", err);
+    }
+
+    // Fallback: Individual fetches (as before)
     const results: Record<string, unknown> = {};
-    const promises = symbols.map(async (sym) => {
+    const promises = validSymbols.map(async (sym) => {
       try {
         const res = await fetch(`${SIDECAR_URL}/snapshot?ticker=${encodeURIComponent(sym)}`, {
           next: { revalidate: 30 }
         });
         if (res.ok) {
           const data = await res.json();
-          results[sym] = data.snapshot || { changePercent: 0 };
+          results[sym] = data.snapshot || { change_percent: 0 };
+        } else {
+          results[sym] = { change_percent: 0 };
         }
       } catch {
-        console.error(`Failed to fetch snapshot for ${sym}`);
+        results[sym] = { change_percent: 0 };
       }
     });
 
@@ -37,4 +56,5 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
+
 }

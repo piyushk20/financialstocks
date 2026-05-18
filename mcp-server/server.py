@@ -32,14 +32,20 @@ def truncate_json(data: any, max_chars: int = 600) -> str:
 
 
 # Helper function to make API requests
+# Load environment variables from .env file
+load_dotenv()
+
+FINANCIAL_DATASETS_API_KEY = os.getenv("FINANCIAL_DATASETS_API_KEY")
+if not FINANCIAL_DATASETS_API_KEY:
+    logger.error("FINANCIAL_DATASETS_API_KEY not found in environment variables")
+
 async def make_request(url: str) -> dict[str, any] | None:
     """Make a request to the Financial Datasets API with proper error handling."""
-    # Load environment variables from .env file
-    load_dotenv()
-    
-    headers = {}
-    if api_key := os.environ.get("FINANCIAL_DATASETS_API_KEY"):
-        headers["X-API-KEY"] = api_key
+    headers = {
+        "X-API-KEY": FINANCIAL_DATASETS_API_KEY or "",
+        "Content-Type": "application/json",
+    }
+
 
     async with httpx.AsyncClient() as client:
         try:

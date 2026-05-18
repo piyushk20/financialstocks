@@ -28,6 +28,7 @@ import {
   LineSeries,
   HistogramSeries,
   type IChartApi,
+  type UTCTimestamp,
 } from "lightweight-charts";
 
 type ORBMatch = {
@@ -42,7 +43,7 @@ type ORBMatch = {
   ema9: number;
   atr: number;
   entry_method: string;
-  levels?: { entry: number; sl: number; tp1: number; tp2: number; rr_ratio: number; sl_pts: number; sl_pct: number };
+  levels?: { entry: number; sl: number; tp1: number; tp2: number; rr_ratio: number; sl_pts: number; sl_pct: number; direction?: "LONG" | "SHORT" | "NONE" };
   error: string | null;
 };
 
@@ -87,10 +88,16 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
     rrVerified: false,
   });
 
-  const handleScan = async () => {
-    setLoading(true);
-    setError(null);
-    setMatches(null);
+  const [isMarketOpen, setIsMarketOpen] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+
+  const handleScan = async (silent: boolean = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+      setMatches(null);
+    }
 
     try {
       const symbols =
@@ -116,14 +123,18 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
       const data = await res.json();
       const filteredMatches = (data.matches || []).filter((m: ORBMatch) => !m.levels || m.levels.rr_ratio >= minRr);
       setMatches(filteredMatches);
+      if (data.is_market_open !== undefined) setIsMarketOpen(data.is_market_open);
+      if (data.timestamp) setLastUpdated(data.timestamp);
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message || "An error occurred");
-      } else {
-        setError("An error occurred");
+      if (!silent) {
+        if (err instanceof Error) {
+          setError(err.message || "An error occurred");
+        } else {
+          setError("An error occurred");
+        }
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -137,6 +148,19 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
       fetchIntradayChart(selectedTicker);
     }
   }, [activeTab, selectedTicker]);
+
+  useEffect(() => {
+    // Initial scan on mount
+    handleScan();
+  }, []);
+
+  useEffect(() => {
+    if (!autoRefresh || !isMarketOpen) return;
+    const timer = setInterval(() => {
+      handleScan(true);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, isMarketOpen, universe, volMult, maxRangeAtr, minRr, topN]);
 
   const fetchIntradayChart = async (ticker: string) => {
     if (!ticker) return;
@@ -179,6 +203,26 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
               <p className="text-sm text-zinc-400 mt-0.5">
                 Opening Range Breakout screener with volume, VWAP, and EMA9 confluences.
               </p>
+              {matches !== null && (
+                <div className="flex flex-wrap items-center gap-3 mt-2">
+                  {isMarketOpen ? (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      🔴 LIVE MARKET SESSION (Auto-updating)
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 text-xs font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
+                      ⏸️ MARKET CLOSED (Showing Breakouts Only)
+                    </div>
+                  )}
+                  {lastUpdated && (
+                    <span className="text-xs text-zinc-500 font-mono">
+                      Updated: {lastUpdated}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -294,9 +338,19 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
               </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-zinc-800/60">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-3 border-t border-zinc-800/60">
+              <label className="flex items-center gap-2 text-xs font-medium text-zinc-400 cursor-pointer hover:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                  className="rounded bg-zinc-900 border-zinc-700 text-violet-600 focus:ring-violet-500 w-4 h-4 cursor-pointer"
+                />
+                Auto-Refresh every 60s (Live Market)
+              </label>
+
               <button
-                onClick={handleScan}
+                onClick={() => handleScan(false)}
                 disabled={loading}
                 className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
               >
@@ -775,15 +829,15 @@ function IntradayLightweightChart({
     const formattedCandles = data.map((d) => {
       const timestamp = Math.floor(new Date(d.time).getTime() / 1000);
       return {
-        time: (isNaN(timestamp) ? 0 : timestamp) as number & { __type: "Time" },
+        time: (isNaN(timestamp) ? 0 : timestamp) as UTCTimestamp,
         open: d.open,
         high: d.high,
         low: d.low,
         close: d.close,
       };
-    }).filter(c => c.time > 0);
+    }).filter((c) => (c.time as number) > 0);
 
-    formattedCandles.sort((a, b) => a.time - b.time);
+    formattedCandles.sort((a, b) => (a.time as number) - (b.time as number));
     candleSeries.setData(formattedCandles);
 
     // VWAP Line
@@ -794,9 +848,9 @@ function IntradayLightweightChart({
     });
     const vwapData = data.map((d) => {
       const timestamp = Math.floor(new Date(d.time).getTime() / 1000);
-      return { time: timestamp as number & { __type: "Time" }, value: d.vwap };
-    }).filter(c => !isNaN(c.time) && c.time > 0 && c.value > 0);
-    vwapData.sort((a, b) => a.time - b.time);
+      return { time: timestamp as UTCTimestamp, value: d.vwap };
+    }).filter((c) => !isNaN(c.time as number) && (c.time as number) > 0 && c.value > 0);
+    vwapData.sort((a, b) => (a.time as number) - (b.time as number));
     vwapSeries.setData(vwapData);
 
     // EMA9 Line
@@ -807,9 +861,9 @@ function IntradayLightweightChart({
     });
     const emaData = data.map((d) => {
       const timestamp = Math.floor(new Date(d.time).getTime() / 1000);
-      return { time: timestamp as number & { __type: "Time" }, value: d.ema9 };
-    }).filter(c => !isNaN(c.time) && c.time > 0 && c.value > 0);
-    emaData.sort((a, b) => a.time - b.time);
+      return { time: timestamp as UTCTimestamp, value: d.ema9 };
+    }).filter((c) => !isNaN(c.time as number) && (c.time as number) > 0 && c.value > 0);
+    emaData.sort((a, b) => (a.time as number) - (b.time as number));
     emaSeries.setData(emaData);
 
     // ORB High / Low horizontal price lines
@@ -848,11 +902,11 @@ function IntradayLightweightChart({
       data.map((d) => {
         const timestamp = Math.floor(new Date(d.time).getTime() / 1000);
         return {
-          time: timestamp as number & { __type: "Time" },
+          time: timestamp as UTCTimestamp,
           value: d.volume ?? 0,
           color: d.close >= d.open ? "#22c55e30" : "#ef444430",
         };
-      }).filter(c => !isNaN(c.time) && c.time > 0)
+      }).filter((c) => !isNaN(c.time as number) && (c.time as number) > 0)
     );
 
     chart.timeScale().fitContent();
