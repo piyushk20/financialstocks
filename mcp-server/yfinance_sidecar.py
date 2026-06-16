@@ -1,38 +1,64 @@
 """
-yfinance FastAPI sidecar for NSE 200 stock data.
+yfinance FastAPI sidecar for NSE 500 stock data.
 Serves on port 8015. Called by the Next.js dashboard API routes.
 
 Endpoints:
-  GET /snapshot?ticker=RELIANCE.NS
-  GET /history?ticker=RELIANCE.NS&period=1y&interval=1d
-  GET /financials?ticker=RELIANCE.NS
-  GET /news?ticker=RELIANCE.NS
-  GET /technicals?ticker=RELIANCE.NS
+  GET  /snapshot?ticker=RELIANCE.NS
+  GET  /history?ticker=RELIANCE.NS&period=1y&interval=1d
+  GET  /financials?ticker=RELIANCE.NS
+  GET  /news?ticker=RELIANCE.NS
+  GET  /technicals?ticker=RELIANCE.NS
+  GET  /forecast?ticker=RELIANCE.NS&horizon=30&capital=100000&risk=0.02
+  GET  /health
+  DELETE /cache  (requires X-Cache-Secret header)
 """
 
 import asyncio
+import logging
+import os
+import re
 import time
+import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+from email.utils import parsedate_to_datetime
 from threading import Lock
 
 import yfinance as yf
 import pandas as pd
 from pydantic import BaseModel
 import pandas_ta as ta
-from fastapi import FastAPI, Query, HTTPException, Body
+from fastapi import FastAPI, Query, HTTPException, Body, Header
 from fastapi.middleware.cors import CORSMiddleware
-from forecasting_engine import run_forecast, compute_position_sizing, run_backtest, compute_indicators, is_timesfm_enabled
+from forecasting_engine import (
+    run_forecast, compute_position_sizing, run_backtest,
+    compute_indicators, is_timesfm_enabled,
+)
 
-app = FastAPI(title="NSE Stock Sidecar", version="1.0.0")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="NSE Stock Sidecar", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3020", "http://127.0.0.1:3020"],
-    allow_methods=["GET", "POST"],
+    allow_origins=[
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:3020", "http://127.0.0.1:3020",
+    ],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
-executor = ThreadPoolExecutor(max_workers=4)
+# Env-tunable config
+_WORKER_THREADS = int(os.getenv("WORKER_THREADS", 4))
+executor = ThreadPoolExecutor(max_workers=_WORKER_THREADS)
+
+# Secret for the cache-clear endpoint (set CACHE_SECRET env var in production)
+_CACHE_SECRET = os.getenv("CACHE_SECRET", "")  # empty = endpoint disabled unless secret set
+
+# Maximum tickers per batch request
+MAX_BATCH = 50
 
 # ---------------------------------------------------------------------------
 # Simple in-memory TTL cache to avoid hammering Yahoo Finance
@@ -40,19 +66,21 @@ executor = ThreadPoolExecutor(max_workers=4)
 _cache: dict = {}
 _cache_lock = Lock()
 
-# Known-bad tickers that return 404 — skip them to avoid burning rate limits
+# Known-bad tickers that return 404 â€” skip them to avoid burning rate limits
 KNOWN_BAD_TICKERS: set = {"TATAMOTORS.NS", "HDFC.NS", "TATAMOTORS-DVR.NS"}
 
-# Ticker aliases — if a symbol maps to a different Yahoo ticker
+# Ticker aliases â€” if a symbol maps to a different Yahoo ticker
 TICKER_ALIASES: dict = {
     # TATAMOTORS delisted from Yahoo; use TATAMOTOR (no S) on BSE as fallback
     "TATAMOTORS.NS": "TATAMOTORS.BO",
 }
 
-SNAPSHOT_TTL = 300      # 5 minutes
-HISTORY_TTL  = 900      # 15 minutes
-FINANCIALS_TTL = 7200   # 2 hours
-BAD_TICKER_TTL = 3600   # 1 hour — don't retry bad tickers for 1h
+# TTLs are env-overridable for easy tuning without code changes
+SNAPSHOT_TTL   = int(os.getenv("SNAPSHOT_TTL",   300))   # 5 minutes
+HISTORY_TTL    = int(os.getenv("HISTORY_TTL",    900))   # 15 minutes
+FINANCIALS_TTL = int(os.getenv("FINANCIALS_TTL", 7200))  # 2 hours
+FORECAST_TTL  = int(os.getenv("FORECAST_TTL",   900))   # 15 minutes
+BAD_TICKER_TTL = int(os.getenv("BAD_TICKER_TTL", 3600))  # 1 hour
 
 
 def _cache_get(key: str):
@@ -263,12 +291,7 @@ def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
             cashflow = stmt_to_list(t.cashflow)
             
         # Post-process list of dicts to fix/calculate fields and filter out empty data years
-        def get_first_valid(d, *keys):
-            for k in keys:
-                v = d.get(k)
-                if v is not None:
-                    return v
-            return None
+        # Re-use first_valid helper defined above (same logic)
 
         filtered_income = []
         for inc_r in income:
@@ -285,15 +308,15 @@ def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
             if eps_val is None or eps_val == 0 or abs(eps_val) > 10000:
                 if net_inc:
                     # Calculate EPS = Net Income / Shares Outstanding
-                    shares = get_first_valid(bal_r, "ordinary_shares_number", "share_issued", "capital_stock")
+                    shares = first_valid(bal_r, "ordinary_shares_number", "share_issued", "capital_stock")
                     if not shares:
                         for b in balance:
-                            shares = get_first_valid(b, "ordinary_shares_number", "share_issued", "capital_stock")
+                            shares = first_valid(b, "ordinary_shares_number", "share_issued", "capital_stock")
                             if shares:
                                 break
                     if not shares:
                         for i_r in income:
-                            shares = get_first_valid(i_r, "diluted_average_shares", "basic_average_shares")
+                            shares = first_valid(i_r, "diluted_average_shares", "basic_average_shares")
                             if shares:
                                 break
                     if shares:
@@ -321,10 +344,6 @@ def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
 
 
 def _get_news(ticker_sym: str) -> list:
-    import urllib.request
-    import xml.etree.ElementTree as ET
-    from email.utils import parsedate_to_datetime
-    
     # Clean the ticker symbol for search query
     clean_ticker = ticker_sym.replace(".NS", "").replace(".BO", "").replace("^", "")
     query = f"{clean_ticker}+stock+when:14d"
@@ -367,9 +386,8 @@ def _get_news(ticker_sym: str) -> list:
     return result[:15]
 
 
-import re
-
 def _validate_ticker(ticker: str):
+    """Validate ticker format. Raises 400 on invalid input."""
     if not ticker or not re.match(r"^[A-Z0-9.\-_^=&]{1,20}$", ticker, re.I):
         raise HTTPException(status_code=400, detail="Invalid ticker format")
 
@@ -377,7 +395,7 @@ def _validate_ticker(ticker: str):
 @app.get("/snapshot")
 async def snapshot(ticker: str = Query(...)):
     _validate_ticker(ticker)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         data = await loop.run_in_executor(executor, _get_snapshot, ticker)
         return {"snapshot": data}
@@ -387,36 +405,44 @@ async def snapshot(ticker: str = Query(...)):
 
 @app.post("/snapshot/batch")
 async def snapshot_batch(req: list[str] = Body(...)):
-    loop = asyncio.get_event_loop()
+    # Security: cap batch size to prevent resource exhaustion
+    if len(req) > MAX_BATCH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size {len(req)} exceeds maximum of {MAX_BATCH}",
+        )
+    # Validate every ticker before touching Yahoo Finance
+    for sym in req:
+        _validate_ticker(sym)
+
+    loop = asyncio.get_running_loop()
     try:
-        # Prune expired cache entries periodically
         _cache_clear_expired()
-        
-        # Use existing _get_snapshot in parallel via executor
-        def _get_all(tickers):
-            res = {}
-            uncached = []
-            # Serve cached ones immediately
+
+        def _get_all(tickers: list[str]) -> dict:
+            result: dict = {}
+            uncached: list[str] = []
             for t in tickers:
                 cached = _cache_get(f"snap:{t}")
                 if cached is not None:
-                    res[t] = cached
-                elif t not in KNOWN_BAD_TICKERS:
-                    uncached.append(t)
+                    result[t] = cached
+                elif t in KNOWN_BAD_TICKERS:
+                    result[t] = {"change_percent": 0, "error": "delisted"}
                 else:
-                    res[t] = {"change_percent": 0, "error": "delisted"}
-            
-            # Fetch uncached ones with a small delay between each to avoid rate limits
+                    uncached.append(t)
+
             for sym in uncached:
                 try:
-                    res[sym] = _get_snapshot(sym)
-                    time.sleep(0.15)  # 150ms between requests
+                    result[sym] = _get_snapshot(sym)
+                    time.sleep(0.15)  # 150 ms between requests to avoid rate limits
                 except Exception:
-                    res[sym] = {"change_percent": 0}
-            return res
-            
+                    result[sym] = {"change_percent": 0}
+            return result
+
         data = await loop.run_in_executor(executor, _get_all, req)
         return data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -429,7 +455,7 @@ async def history(
     interval: str = Query("1d"),
 ):
     _validate_ticker(ticker)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         data = await loop.run_in_executor(executor, _get_history, ticker, period, interval)
         return {"prices": data}
@@ -442,7 +468,7 @@ async def financials(ticker: str = Query(...), period: str = Query("annual")):
     _validate_ticker(ticker)
     if period not in ("annual", "quarterly"):
         raise HTTPException(status_code=400, detail="period must be 'annual' or 'quarterly'")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         data = await loop.run_in_executor(executor, _get_financials, ticker, period)
         return data
@@ -453,7 +479,7 @@ async def financials(ticker: str = Query(...), period: str = Query("annual")):
 @app.get("/news")
 async def news(ticker: str = Query(...)):
     _validate_ticker(ticker)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         data = await loop.run_in_executor(executor, _get_news, ticker)
         return {"news": data}
@@ -637,7 +663,7 @@ def _scan_momentum(params: MomentumRequest) -> list:
 
 @app.post("/momentum-burst")
 async def momentum_burst(req: MomentumRequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         matches = await loop.run_in_executor(executor, _scan_momentum, req)
         return {"matches": matches}
@@ -1002,7 +1028,7 @@ def _scan_multi_year_breakout(params: BreakoutScannerRequest) -> dict:
                         "roa": (info.get("returnOnAssets") or 0) * 100,
                         "eps": info.get("trailingEps"),
                         "pe": info.get("trailingPE"),
-                        "sector": info.get("sector") or "—",
+                        "sector": info.get("sector") or "â€”",
                     }
                 except Exception as fe:
                     print(f"Error fetching fundamentals for {symbol}: {fe}")
@@ -1026,7 +1052,7 @@ def _scan_multi_year_breakout(params: BreakoutScannerRequest) -> dict:
                 
             results_list.append({
                 "symbol": symbol,
-                "sector": fund.get("sector", "—") if fund else "—",
+                "sector": fund.get("sector", "â€”") if fund else "â€”",
                 "price": round(close, 2),
                 "high_ny": round(high_ny_val, 2),
                 "dist_top": round(dist_from_top, 2),
@@ -1224,7 +1250,7 @@ def _scan_vcp(params: VCPRequest) -> list:
 
 @app.post("/vcp-scanner")
 async def vcp_scanner(req: VCPRequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         matches = await loop.run_in_executor(executor, _scan_vcp, req)
         return {"matches": matches}
@@ -1349,7 +1375,7 @@ def _scan_ep(params: EPRequest) -> list:
 
 @app.post("/ep-scanner")
 async def ep_scanner(req: EPRequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         matches = await loop.run_in_executor(executor, _scan_ep, req)
         return {"matches": matches}
@@ -1361,7 +1387,7 @@ async def ep_scanner(req: EPRequest = Body(...)):
 @app.post("/wma44-crossover")
 
 async def wma44_crossover(req: WMARequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         matches = await loop.run_in_executor(executor, _scan_wma_crossover, req)
         return {"matches": matches}
@@ -1370,7 +1396,7 @@ async def wma44_crossover(req: WMARequest = Body(...)):
 
 @app.post("/ema-crossover")
 async def ema_crossover(req: EMACrossoverRequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         results = await loop.run_in_executor(executor, _scan_ema_crossover, req)
         return results
@@ -1379,7 +1405,7 @@ async def ema_crossover(req: EMACrossoverRequest = Body(...)):
 
 @app.post("/breakout-scanner")
 async def breakout_scanner(req: BreakoutScannerRequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         results = await loop.run_in_executor(executor, _scan_multi_year_breakout, req)
         return results
@@ -1535,7 +1561,7 @@ async def orb_scanner(req: ORBRequest = Body(...)):
         (now_ist.hour == 15 and now_ist.minute <= 30)
     )
     
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         matches = await loop.run_in_executor(executor, _scan_orb, req, is_market_open)
         return {
@@ -1549,7 +1575,7 @@ async def orb_scanner(req: ORBRequest = Body(...)):
 @app.get("/intraday")
 async def intraday(ticker: str = Query(...)):
     _validate_ticker(ticker)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         data = await loop.run_in_executor(executor, _process_orb_single, ticker, True, 1.5)
         if data.get("error"):
@@ -1720,7 +1746,7 @@ def _scan_atr_extension(params: ATRExtensionRequest) -> list:
 
 @app.post("/atr-extension")
 async def atr_extension(req: ATRExtensionRequest = Body(...)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         matches = await loop.run_in_executor(executor, _scan_atr_extension, req)
         return {"matches": matches}
@@ -1736,12 +1762,16 @@ async def forecast_endpoint(
     risk: float = Query(0.02)
 ):
     _validate_ticker(ticker)
+    # Clamp parameters to safe ranges (defence-in-depth after proxy validation)
+    horizon = max(5, min(horizon, 120))
+    capital = max(1_000, min(capital, 1_000_000_000))
+    risk = max(0.001, min(risk, 0.20))
     cache_key = f"forecast:{ticker}:{horizon}:{capital}:{risk}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         def _process_forecast():
             prices_rows = _get_history(ticker, period="2y", interval="1d")
@@ -1808,7 +1838,7 @@ async def forecast_endpoint(
             }
             
         data = await loop.run_in_executor(executor, _process_forecast)
-        _cache_set(cache_key, data, 900)
+        _cache_set(cache_key, data, FORECAST_TTL)
         return data
     except HTTPException as he:
         raise he
@@ -1823,11 +1853,17 @@ async def health():
 
 
 @app.delete("/cache")
-async def clear_cache():
-    """Clear all cached data — useful when you want fresh data."""
+async def clear_cache(x_cache_secret: str = Header(default="")):
+    """
+    Clear all cached data. Requires the X-Cache-Secret header to match
+    the CACHE_SECRET environment variable. Disabled if CACHE_SECRET is empty.
+    """
+    if not _CACHE_SECRET or x_cache_secret != _CACHE_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden â€” valid X-Cache-Secret header required")
     with _cache_lock:
         count = len(_cache)
         _cache.clear()
+    logger.info("Cache cleared: %d entries removed", count)
     return {"cleared": count}
 
 
