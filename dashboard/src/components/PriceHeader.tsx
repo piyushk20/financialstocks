@@ -25,39 +25,39 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
 
   if (loading) {
     return (
-      <div className="glass-card p-6 rounded-2xl space-y-3">
-        <Skeleton className="h-6 w-48 bg-zinc-800" />
-        <Skeleton className="h-12 w-64 bg-zinc-800" />
+      <div className="surface-card p-6 rounded-2xl space-y-3">
+        <Skeleton className="h-6 w-48 bg-[var(--bg-elevated)]" />
+        <Skeleton className="h-12 w-64 bg-[var(--bg-elevated)]" />
         <div className="flex gap-4">
-          <Skeleton className="h-5 w-24 bg-zinc-800" />
-          <Skeleton className="h-5 w-24 bg-zinc-800" />
-          <Skeleton className="h-5 w-24 bg-zinc-800" />
+          <Skeleton className="h-5 w-24 bg-[var(--bg-elevated)]" />
+          <Skeleton className="h-5 w-24 bg-[var(--bg-elevated)]" />
+          <Skeleton className="h-5 w-24 bg-[var(--bg-elevated)]" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="glass-card p-6 rounded-2xl">
+    <div className="surface-card p-6 rounded-2xl">
       {/* Header row */}
       <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="font-mono text-sm font-bold text-violet-400 tracking-widest">
+            <span className="font-mono text-sm font-bold text-[var(--accent)] tracking-widest">
               {symbol.includes("=F") ? symbol : symbol.replace(".NS", "")}
             </span>
-            <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+            <span className="text-xs text-[var(--text-secondary)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded-full">
               {isGlobal ? "COMEX/NYMEX" : "NSE"}
             </span>
             {stock && (
-              <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+              <span className="text-xs text-[var(--text-secondary)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded-full">
                 {stock.sector}
               </span>
             )}
           </div>
-          <h1 className="text-lg font-semibold text-zinc-100">{stock?.name ?? symbol}</h1>
+          <h1 className="text-lg font-semibold text-[var(--text-primary)]">{stock?.name ?? symbol}</h1>
         </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold ${isUp ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold ${isUp ? "bg-[var(--up)]/10 text-[var(--up)]" : "bg-[var(--down)]/10 text-[var(--down)]"}`}>
           {isUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
           {isUp ? "Bullish" : "Bearish"}
         </div>
@@ -67,15 +67,15 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={snapshot?.price}
-          initial={{ backgroundColor: isUp ? "#22c55e22" : "#ef444422" }}
+          initial={{ backgroundColor: isUp ? "oklch(65% 0.15 150 / 0.15)" : "oklch(60% 0.18 25 / 0.15)" }}
           animate={{ backgroundColor: "transparent" }}
           transition={{ duration: 1.2 }}
           className="rounded-xl px-2 -mx-2 flex items-baseline gap-3 mb-4"
         >
-          <span className="text-5xl font-bold text-zinc-100 tracking-tight">
+          <span className="text-5xl font-bold text-[var(--text-primary)] tracking-tight tabular-nums">
             {currencySymbol}{fmt(snapshot?.price)}
           </span>
-          <div className={`flex items-center gap-1 text-base font-semibold ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+          <div className={`flex items-center gap-1 text-base font-semibold tabular-nums ${isUp ? "text-[var(--up)]" : "text-[var(--down)]"}`}>
             <span>{isUp ? "+" : ""}{fmt(snapshot?.change)}</span>
             <span>({isUp ? "+" : ""}{fmt(snapshot?.change_percent)}%)</span>
           </div>
@@ -86,23 +86,23 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Open", value: `${currencySymbol}${fmt(snapshot?.open)}`, icon: <Activity className="h-3.5 w-3.5" /> },
-          { label: "High", value: `${currencySymbol}${fmt(snapshot?.high)}`, icon: <TrendingUp className="h-3.5 w-3.5 text-emerald-400" /> },
-          { label: "Low", value: `${currencySymbol}${fmt(snapshot?.low)}`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" /> },
+          { label: "High", value: `${currencySymbol}${fmt(snapshot?.high)}`, icon: <TrendingUp className="h-3.5 w-3.5 text-[var(--up)]" /> },
+          { label: "Low", value: `${currencySymbol}${fmt(snapshot?.low)}`, icon: <TrendingDown className="h-3.5 w-3.5 text-[var(--down)]" /> },
           { label: "Prev Close", value: `${currencySymbol}${fmt(snapshot?.previous_close)}`, icon: <DollarSign className="h-3.5 w-3.5" /> },
         ].map(({ label, value, icon }) => (
-          <div key={label} className="bg-zinc-900/60 rounded-xl p-3">
-            <div className="flex items-center gap-1 text-zinc-500 text-[10px] font-medium uppercase tracking-widest mb-1">
+          <div key={label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3">
+            <div className="flex items-center gap-1 text-[var(--text-muted)] text-[10px] font-medium uppercase tracking-widest mb-1">
               {icon}{label}
             </div>
-            <div className="text-zinc-200 font-semibold text-sm">{value}</div>
+            <div className="text-[var(--text-primary)] font-semibold text-sm tabular-nums">{value}</div>
           </div>
         ))}
       </div>
 
       {/* Volume */}
-      <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+      <div className="mt-3 flex items-center gap-2 text-xs text-[var(--text-muted)]">
         <span>Volume:</span>
-        <span className="text-zinc-300 font-medium">{snapshot?.volume?.toLocaleString("en-IN") ?? "—"}</span>
+        <span className="text-[var(--text-secondary)] font-medium tabular-nums">{snapshot?.volume?.toLocaleString("en-IN") ?? "—"}</span>
       </div>
     </div>
   );

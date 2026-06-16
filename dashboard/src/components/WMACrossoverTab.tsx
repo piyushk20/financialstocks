@@ -27,7 +27,7 @@ export function WMACrossoverTab({ onSelect }: { onSelect?: (symbol: string) => v
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "sectoral">("nifty50");
+  const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "large" | "mid" | "small" | "micro" | "sectoral">("nifty50");
   const [topN, setTopN] = useState(50);
 
   const handleScan = async () => {
@@ -36,15 +36,17 @@ export function WMACrossoverTab({ onSelect }: { onSelect?: (symbol: string) => v
     setMatches(null);
 
     try {
-      let symbols: string[] = [];
-      
+      let filteredStocks = NSE500;
       if (universe === "nifty50") {
-        symbols = NIFTY50_SYMBOLS;
+        filteredStocks = NSE500.filter(s => NIFTY50_SYMBOLS.includes(s.symbol) || NIFTY50_SYMBOLS.includes(s.symbol.replace(".NS", "")));
       } else if (universe === "nifty500") {
-        symbols = NSE500.filter(s => s.sector !== "Index").map(s => s.symbol);
-      } else if (universe === "sectoral") {
-        symbols = NSE500.filter(s => s.sector === "Index").map(s => s.symbol);
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap !== "micro");
+      } else if (universe === "large" || universe === "mid" || universe === "small" || universe === "micro") {
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap === universe);
+      } else {
+        filteredStocks = NSE500.filter(s => s.sector === "Index");
       }
+      const symbols = filteredStocks.map(s => s.symbol);
 
       const res = await fetch("/api/wma44-crossover", {
         method: "POST",
@@ -75,11 +77,15 @@ export function WMACrossoverTab({ onSelect }: { onSelect?: (symbol: string) => v
               <label className="text-xs text-zinc-500 font-medium lowercase tracking-tighter">Universe</label>
               <select 
                 value={universe} 
-                onChange={e => setUniverse(e.target.value as "nifty50" | "nifty500" | "sectoral")}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none"
+                onChange={e => setUniverse(e.target.value as any)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none font-medium"
               >
                 <option value="nifty50">Nifty 50</option>
-                <option value="nifty500">Nifty 500</option>
+                <option value="nifty500">Nifty 500 Universe</option>
+                <option value="large">Large Cap Stocks</option>
+                <option value="mid">Mid Cap Stocks</option>
+                <option value="small">Small Cap Stocks</option>
+                <option value="micro">Micro Cap Stocks</option>
                 <option value="sectoral">Sectoral Indices</option>
               </select>
             </div>

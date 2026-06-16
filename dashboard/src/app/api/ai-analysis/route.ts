@@ -4,6 +4,8 @@ import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { type IncomeStatement } from "@/lib/financialDatasets";
 
+export const dynamic = "force-dynamic";
+
 export const maxDuration = 60;
 
 /**

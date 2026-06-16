@@ -131,7 +131,7 @@ function CFTable({ rows }: { rows: CFRow[] }) {
 export function FinancialsGrid({ income, balance, cashflow, loading, period, onPeriodChange, isCommodity }: FinancialsGridProps) {
   if (!loading && isCommodity) {
     return (
-      <div className="glass-card rounded-2xl p-10 flex flex-col items-center justify-center gap-4 text-center min-h-[200px]">
+      <div className="surface-card rounded-2xl p-10 flex flex-col items-center justify-center gap-4 text-center min-h-[200px]">
         <div className="text-4xl">🪙</div>
         <h3 className="text-zinc-200 font-semibold">Commodity / Futures Contract</h3>
         <p className="text-zinc-500 text-sm max-w-sm">
@@ -142,7 +142,7 @@ export function FinancialsGrid({ income, balance, cashflow, loading, period, onP
     );
   }
   return (
-    <div className="glass-card rounded-2xl p-5">
+    <div className="surface-card rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Financials</h2>
         <div className="flex rounded-lg overflow-hidden border border-zinc-700" suppressHydrationWarning>

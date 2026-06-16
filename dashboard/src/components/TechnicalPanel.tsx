@@ -86,7 +86,7 @@ export function TechnicalPanel({
   return (
     <div className="space-y-4">
       {/* EMA Grid */}
-      <div className="glass-card rounded-2xl p-4 grid grid-cols-3 gap-3">
+      <div className="surface-card rounded-2xl p-4 grid grid-cols-3 gap-3">
         {[
           { label: "EMA 20", value: currentEma20, color: "text-blue-400" },
           { label: "EMA 50", value: currentEma50, color: "text-amber-400" },
@@ -102,7 +102,7 @@ export function TechnicalPanel({
       </div>
 
       {/* RSI */}
-      <div className="glass-card rounded-2xl p-5">
+      <div className="surface-card rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-violet-400" />
@@ -127,7 +127,7 @@ export function TechnicalPanel({
       </div>
 
       {/* MACD */}
-      <div className="glass-card rounded-2xl p-5">
+      <div className="surface-card rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">MACD (12/26/9)</h3>
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${macdBull ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>

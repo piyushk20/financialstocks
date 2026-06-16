@@ -64,7 +64,7 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
   const [matches, setMatches] = useState<ORBMatch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "sectoral">("nifty50");
+  const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "large" | "mid" | "small" | "micro" | "sectoral">("nifty50");
   const [volMult, setVolMult] = useState(1.5);
   const [maxRangeAtr, setMaxRangeAtr] = useState(2.0);
   const [minRr, setMinRr] = useState(1.0);
@@ -100,12 +100,17 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
     }
 
     try {
-      const symbols =
-        universe === "nifty50"
-          ? NIFTY50_SYMBOLS
-          : universe === "nifty500"
-          ? NSE500.filter((s) => s.sector !== "Index").map((s) => s.symbol)
-          : NSE500.filter((s) => s.sector === "Index").map((s) => s.symbol);
+      let filteredStocks = NSE500;
+      if (universe === "nifty50") {
+        filteredStocks = NSE500.filter(s => NIFTY50_SYMBOLS.includes(s.symbol) || NIFTY50_SYMBOLS.includes(s.symbol.replace(".NS", "")));
+      } else if (universe === "nifty500") {
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap !== "micro");
+      } else if (universe === "large" || universe === "mid" || universe === "small" || universe === "micro") {
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap === universe);
+      } else {
+        filteredStocks = NSE500.filter(s => s.sector === "Index");
+      }
+      const symbols = filteredStocks.map(s => s.symbol);
 
       const res = await fetch("/api/orb-scanner", {
         method: "POST",
@@ -188,7 +193,7 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
   const checklistPercent = Math.round((checklistCompletedCount / checklistTotalCount) * 100);
 
   return (
-    <div className="glass-card rounded-2xl p-6 border border-zinc-800/50 space-y-6">
+    <div className="surface-card rounded-2xl p-6 border border-zinc-800/50 space-y-6">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-800/60 pb-5">
         <div>
@@ -277,11 +282,15 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
                 </label>
                 <select
                   value={universe}
-                  onChange={(e) => setUniverse(e.target.value as "nifty50" | "nifty500")}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm text-zinc-200 p-2.5 focus:border-violet-500 outline-none transition-all"
+                  onChange={(e) => setUniverse(e.target.value as any)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl text-sm text-zinc-200 p-2.5 focus:border-violet-500 outline-none transition-all font-medium"
                 >
                   <option value="nifty50">Nifty 50</option>
-                  <option value="nifty500">Nifty 500</option>
+                  <option value="nifty500">Nifty 500 Universe</option>
+                  <option value="large">Large Cap Stocks</option>
+                  <option value="mid">Mid Cap Stocks</option>
+                  <option value="small">Small Cap Stocks</option>
+                  <option value="micro">Micro Cap Stocks</option>
                   <option value="sectoral">Sectoral Indices</option>
                 </select>
               </div>
@@ -722,7 +731,7 @@ export function ORBScannerTab({ onSelect }: { onSelect?: (symbol: string) => voi
             </div>
           )}
 
-          <div className="glass-card rounded-2xl p-5 border border-zinc-800 shadow-2xl">
+          <div className="surface-card rounded-2xl p-5 border border-zinc-800 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
                 <h3 className="text-lg font-bold font-mono text-zinc-100">
@@ -835,7 +844,7 @@ function IntradayLightweightChart({
         low: d.low,
         close: d.close,
       };
-    }).filter((c) => (c.time as number) > 0);
+    }).filter((c) => (c.time as number) > 0 && c.open != null && c.high != null && c.low != null && c.close != null);
 
     formattedCandles.sort((a, b) => (a.time as number) - (b.time as number));
     candleSeries.setData(formattedCandles);

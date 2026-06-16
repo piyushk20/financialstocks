@@ -1,20 +1,25 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-
 @import "tailwindcss";
 
 /* ── Design Tokens ── */
 :root {
-  --bg-base: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-elevated: #334155;
-  --accent: #f59e0b;
-  --accent-secondary: #8b5cf6;
-  --up: #10b981;
-  --down: #ef4444;
-  --glass-bg: rgba(30, 41, 59, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --font-heading: "Fira Code", monospace;
-  --font-body: "Fira Sans", sans-serif;
+  /* OKLCH Tinted Neutrals (Violet-leaning) */
+  --bg-base: oklch(14% 0.015 275);
+  --bg-surface: oklch(18% 0.015 275);
+  --bg-elevated: oklch(24% 0.015 275);
+  --bg-hover: oklch(28% 0.015 275);
+  --text-primary: oklch(96% 0.01 275);
+  --text-secondary: oklch(75% 0.015 275);
+  --text-muted: oklch(60% 0.015 275);
+  
+  --accent: oklch(70% 0.16 275);
+  --up: oklch(65% 0.15 150);
+  --down: oklch(60% 0.18 25);
+  
+  --border-subtle: oklch(25% 0.015 275);
+  --border-strong: oklch(35% 0.015 275);
+
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 /* ── Base Reset ── */
@@ -23,80 +28,77 @@
 }
 html {
   scroll-behavior: smooth;
+  font-family: var(--font-body);
 }
 body {
   background-color: var(--bg-base);
-  font-family: var(--font-inter);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
 }
 
-/* Grid background pattern */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(124, 58, 237, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
+/* ── Surfaces (Replaces glass-card) ── */
+.surface-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
 }
 
-/* ── Glassmorphism Card ── */
-.glass-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+.surface-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+}
+
+/* ── Typography & Readability ── */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+p {
+  text-wrap: pretty;
+}
+
+/* Tabular numbers for all financial data */
+.data-table, .tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
 }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--bg-elevated);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--bg-hover);
 }
 
 /* ── Skeleton ── */
 .skeleton-pulse {
   animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  background-color: var(--bg-elevated);
 }
 @keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 /* ── Price flash animations ── */
 @keyframes flash-up {
-  0% {
-    background-color: rgba(34, 197, 94, 0.15);
-  }
-  100% {
-    background-color: transparent;
-  }
+  0% { background-color: oklch(65% 0.15 150 / 0.15); }
+  100% { background-color: transparent; }
 }
 @keyframes flash-down {
-  0% {
-    background-color: rgba(239, 68, 68, 0.15);
-  }
-  100% {
-    background-color: transparent;
-  }
+  0% { background-color: oklch(60% 0.18 25 / 0.15); }
+  100% { background-color: transparent; }
 }
 .flash-up {
   animation: flash-up 1.2s ease-out;
@@ -107,29 +109,30 @@ body::before {
 
 /* ── Recharts tooltip ── */
 .recharts-tooltip-wrapper .recharts-default-tooltip {
-  background: #18181b !important;
-  border: 1px solid #3f3f46 !important;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-strong) !important;
   border-radius: 8px !important;
-  font-size: 12px !important;
+  font-size: 0.875rem !important;
+  color: var(--text-primary) !important;
 }
 
 /* ── Prose overrides for AI analysis markdown ── */
 .prose h3 {
-  color: #a78bfa;
-  margin-top: 1rem;
+  color: var(--accent);
+  margin-top: 1.5rem;
   margin-bottom: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 1rem;
 }
 .prose h2 {
-  color: #f4f4f5;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 .prose li {
-  color: #d4d4d8;
+  color: var(--text-secondary);
   font-size: 0.875rem;
   margin-left: 1rem;
 }
 .prose strong {
-  color: #f4f4f5;
+  color: var(--text-primary);
 }

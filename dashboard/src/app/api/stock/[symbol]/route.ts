@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const SIDECAR = "http://127.0.0.1:8015";
 
 export async function GET(

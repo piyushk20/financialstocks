@@ -31,7 +31,7 @@ export function Heatmap({ data, title = "Nifty 50 Heatmap", onSelect }: HeatmapP
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 transition-all border-violet-500/10 shadow-2xl shadow-black/40">
+    <div className="surface-card rounded-2xl p-6 transition-all border-violet-500/10 shadow-2xl shadow-black/40">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-widest flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />

@@ -91,7 +91,11 @@ export function CandlestickChart({
       wickDownColor: "#ef4444",
     });
 
-    const candles = visibleData.map((d) => ({
+    const filteredVisibleData = visibleData.filter(
+      (d) => d.open != null && d.high != null && d.low != null && d.close != null
+    );
+
+    const candles = filteredVisibleData.map((d) => ({
       time: d.time as `${number}-${number}-${number}`,
       open: d.open,
       high: d.high,
@@ -146,7 +150,7 @@ export function CandlestickChart({
       scaleMargins: { top: 0.8, bottom: 0 },
     });
     volumeSeries.setData(
-      visibleData.map((d) => ({
+      filteredVisibleData.map((d) => ({
         time: d.time as `${number}-${number}-${number}`,
         value: d.volume ?? 0,
         color: d.close >= d.open ? "#22c55e30" : "#ef444430",
@@ -173,7 +177,7 @@ export function CandlestickChart({
   }
 
   return (
-    <div className="glass-card rounded-2xl p-4">
+    <div className="surface-card rounded-2xl p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium">
           <span className="text-zinc-400">Indicators:</span>

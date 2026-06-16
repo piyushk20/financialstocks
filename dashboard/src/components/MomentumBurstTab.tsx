@@ -20,7 +20,7 @@ export function MomentumBurstTab({ onSelect }: { onSelect?: (symbol: string) => 
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "sectoral">("nifty50");
+  const [universe, setUniverse] = useState<"nifty50" | "nifty500" | "large" | "mid" | "small" | "micro" | "sectoral">("nifty50");
   const [minGain, setMinGain] = useState(3.5);
   const [rsiMin, setRsiMin] = useState(45);
   const [rsiMax, setRsiMax] = useState(70);
@@ -37,11 +37,17 @@ export function MomentumBurstTab({ onSelect }: { onSelect?: (symbol: string) => 
     setMatches(null);
 
     try {
-      const symbols = universe === "nifty50" 
-        ? NIFTY50_SYMBOLS
-        : universe === "nifty500"
-        ? NSE500.filter(s => s.sector !== "Index").map(s => s.symbol)
-        : NSE500.filter(s => s.sector === "Index").map(s => s.symbol);
+      let filteredStocks = NSE500;
+      if (universe === "nifty50") {
+        filteredStocks = NSE500.filter(s => NIFTY50_SYMBOLS.includes(s.symbol) || NIFTY50_SYMBOLS.includes(s.symbol.replace(".NS", "")));
+      } else if (universe === "nifty500") {
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap !== "micro");
+      } else if (universe === "large" || universe === "mid" || universe === "small" || universe === "micro") {
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap === universe);
+      } else {
+        filteredStocks = NSE500.filter(s => s.sector === "Index");
+      }
+      const symbols = filteredStocks.map(s => s.symbol);
 
       const res = await fetch("/api/momentum-burst", {
         method: "POST",
@@ -74,7 +80,7 @@ export function MomentumBurstTab({ onSelect }: { onSelect?: (symbol: string) => 
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 border border-zinc-800/50 space-y-6">
+    <div className="surface-card rounded-2xl p-6 border border-zinc-800/50 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
@@ -105,11 +111,15 @@ export function MomentumBurstTab({ onSelect }: { onSelect?: (symbol: string) => 
             <label className="text-xs text-zinc-500 font-medium">Universe</label>
             <select 
               value={universe} 
-              onChange={e => setUniverse(e.target.value as "nifty50" | "nifty500")}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none"
+              onChange={e => setUniverse(e.target.value as any)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none font-medium"
             >
               <option value="nifty50">Nifty 50</option>
-              <option value="nifty500">Nifty 500</option>
+              <option value="nifty500">Nifty 500 Universe</option>
+              <option value="large">Large Cap Stocks</option>
+              <option value="mid">Mid Cap Stocks</option>
+              <option value="small">Small Cap Stocks</option>
+              <option value="micro">Micro Cap Stocks</option>
               <option value="sectoral">Sectoral Indices</option>
             </select>
           </div>

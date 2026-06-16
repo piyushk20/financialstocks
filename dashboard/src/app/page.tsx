@@ -15,10 +15,15 @@ import { Heatmap } from "@/components/Heatmap";
 import { MomentumBurstTab } from "@/components/MomentumBurstTab";
 import { WMACrossoverTab } from "@/components/WMACrossoverTab";
 import { VCPScannerTab } from "@/components/VCPScannerTab";
+import { ATRExtensionTab } from "@/components/ATRExtensionTab";
 import { EPScannerTab } from "@/components/EPScannerTab";
 import { ORBScannerTab } from "@/components/ORBScannerTab";
 import PivotLevelsTab from "@/components/PivotLevelsTab";
+import { ForecastingTab } from "@/components/ForecastingTab";
+import { EMACrossoverTab } from "@/components/EMACrossoverTab";
+import { BreakoutScannerTab } from "@/components/BreakoutScannerTab";
 import { NSE500 } from "@/data/nse500";
+import { NSE200 } from "@/data/nse200";
 import { BarChart3 } from "lucide-react";
 import { useEffect } from "react";
 
@@ -84,7 +89,8 @@ export default function Dashboard() {
       try {
         const heatmapSymbols = [
           ...NSE500.filter(s => s.sector === "Index").map(s => s.symbol),
-          ...NSE500.filter(s => s.sector !== "Index").slice(0, 50).map(s => s.symbol)
+          ...NSE500.filter(s => s.sector === "Commodity").map(s => s.symbol),
+          ...NSE200.slice(0, 50).map(s => s.symbol)
         ];
         const res = await fetch("/api/snapshot", {
           method: "POST",
@@ -110,7 +116,7 @@ export default function Dashboard() {
   return (
     <div className="relative min-h-screen z-10" suppressHydrationWarning>
       {!mounted ? null : (
-        <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-[#0a0a0f]/90 backdrop-blur-xl px-6 py-3">
+        <header className="sticky top-0 z-50 border-b border-[var(--border-subtle)] bg-[var(--bg-base)]/90 backdrop-blur-xl px-6 py-3">
           <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-6">
             {/* Brand */}
             <div className="flex items-center gap-2.5 shrink-0">
@@ -118,8 +124,8 @@ export default function Dashboard() {
                 <BarChart3 className="h-4 w-4 text-white" />
               </div>
               <div>
-                <span className="text-sm font-bold text-zinc-100">NSE 500</span>
-                <span className="ml-1.5 text-xs text-zinc-500">Dashboard</span>
+                <span className="text-sm font-bold text-[var(--text-primary)]">NSE 500</span>
+                <span className="ml-1.5 text-xs text-[var(--text-secondary)]">Dashboard</span>
               </div>
             </div>
 
@@ -142,7 +148,7 @@ export default function Dashboard() {
 
       {!mounted ? (
         <div className="flex-1 flex items-center justify-center min-h-[60vh]" suppressHydrationWarning>
-          <div className="animate-pulse text-zinc-500 lowercase tracking-tighter" suppressHydrationWarning>
+          <div className="animate-pulse text-[var(--text-muted)] lowercase tracking-tighter" suppressHydrationWarning>
             Synchronizing Market Intelligence...
           </div>
         </div>
@@ -154,7 +160,7 @@ export default function Dashboard() {
             {heatmapData.length > 0 ? (
               <Heatmap data={heatmapData} onSelect={setSymbol} />
             ) : (
-              <div className="glass-card rounded-2xl p-6 h-32 animate-pulse flex items-center justify-center text-zinc-500 font-medium lowercase tracking-tighter">
+              <div className="surface-card rounded-2xl p-6 h-32 animate-pulse flex items-center justify-center text-[var(--text-muted)] font-medium lowercase tracking-tighter">
                 Synchronizing Nifty 50 Heatmap...
               </div>
             )}
@@ -203,93 +209,144 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Row 3: Tabbed bottom section */}
-                <Tabs defaultValue="financials">
-                  <TabsList className="bg-zinc-900/60 border border-zinc-800 px-1 py-1 h-auto mb-4 gap-1">
-                    {[
-                      { value: "financials", label: "Financials" },
-                      { value: "pivots", label: "🎯 Pivot Levels" },
-                      { value: "news", label: "News" },
-                      { value: "ai", label: "✦ AI Analysis" },
-                      { value: "vcp", label: "⚡ VCP & RS Scan" },
-                      { value: "ep", label: "🔥 EP Scanner" },
-                      { value: "orb", label: "⏱️ 15m ORB" },
-                      { value: "momentum", label: "🚀 Momentum" },
-                      { value: "wma", label: "📈 WMA 44" },
-                    ].map(({ value, label }) => (
-                      <TabsTrigger
-                        key={value}
-                        value={value}
-                        className="text-xs font-medium data-[state=active]:bg-violet-600 data-[state=active]:text-white text-zinc-400 rounded-md px-4 py-1.5 transition-all"
-                      >
-                        {label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
+                {/* Row 3: Stock Insights Terminal */}
+                <div className="surface-card rounded-2xl p-6 border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 backdrop-blur-xl shadow-xl">
+                  <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-4">
+                    <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                    <h2 className="text-sm font-bold tracking-tight text-[var(--text-primary)]">Stock Research Terminal</h2>
+                  </div>
+                  <Tabs defaultValue="financials">
+                    <TabsList className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-1 py-1 h-auto min-h-[40px] mb-4 gap-1 flex-wrap w-fit">
+                      {[
+                        { value: "financials", label: "Financials" },
+                        { value: "pivots", label: "🎯 Pivot Levels" },
+                        { value: "news", label: "News" },
+                        { value: "ai", label: "✦ AI Analysis" },
+                        { value: "forecast", label: "🔮 Price Forecast" },
+                      ].map(({ value, label }) => (
+                        <TabsTrigger
+                          key={value}
+                          value={value}
+                          className="text-xs font-semibold data-[state=active]:bg-violet-600 data-[state=active]:text-white text-[var(--text-secondary)] rounded-md px-4 py-2 flex items-center transition-all cursor-pointer"
+                        >
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
 
-                  <TabsContent value="financials">
-                    <FinancialsGrid
-                      income={finData?.income ?? []}
-                      balance={finData?.balance ?? []}
-                      cashflow={finData?.cashflow ?? []}
-                      loading={finLoading}
-                      period={finPeriod}
-                      onPeriodChange={setFinPeriod}
-                      isCommodity={finData?.isCommodity}
-                    />
-                  </TabsContent>
+                    <TabsContent value="financials">
+                      <FinancialsGrid
+                        income={finData?.income ?? []}
+                        balance={finData?.balance ?? []}
+                        cashflow={finData?.cashflow ?? []}
+                        loading={finLoading}
+                        period={finPeriod}
+                        onPeriodChange={setFinPeriod}
+                        isCommodity={finData?.isCommodity}
+                      />
+                    </TabsContent>
 
-                  <TabsContent value="pivots">
-                    <PivotLevelsTab 
-                      pivots={techData?.pivots} 
-                      loading={techLoading} 
-                    />
-                  </TabsContent>
+                    <TabsContent value="pivots">
+                      <PivotLevelsTab 
+                        pivots={techData?.pivots} 
+                        loading={techLoading} 
+                      />
+                    </TabsContent>
 
-                  <TabsContent value="news">
-                    <NewsFeed
-                      news={newsData?.news ?? []}
-                      loading={newsLoading}
-                    />
-                  </TabsContent>
+                    <TabsContent value="news">
+                      <NewsFeed
+                        news={newsData?.news ?? []}
+                        loading={newsLoading}
+                      />
+                    </TabsContent>
 
-                  <TabsContent value="ai">
-                    <AIAnalysisTab
-                      symbol={symbol}
-                      snapshot={stockData?.snapshot}
-                      income={finData?.income ?? []}
-                      balance={finData?.balance ?? []}
-                      cashflow={finData?.cashflow ?? []}
-                      technicals={techData}
-                    />
-                  </TabsContent>
+                    <TabsContent value="ai">
+                      <AIAnalysisTab
+                        symbol={symbol}
+                        snapshot={stockData?.snapshot}
+                        income={finData?.income ?? []}
+                        balance={finData?.balance ?? []}
+                        cashflow={finData?.cashflow ?? []}
+                        technicals={techData}
+                      />
+                    </TabsContent>
 
-                  <TabsContent value="vcp">
-                    <VCPScannerTab onSelect={setSymbol} />
-                  </TabsContent>
+                    <TabsContent value="forecast">
+                      <ForecastingTab onSelect={setSymbol} />
+                    </TabsContent>
+                  </Tabs>
+                </div>
 
-                  <TabsContent value="ep">
-                    <EPScannerTab onSelect={setSymbol} />
-                  </TabsContent>
+                {/* Row 4: Global Market Screener Suite */}
+                <div className="surface-card rounded-2xl p-6 border border-[var(--border-subtle)] bg-[var(--bg-surface)]/30 backdrop-blur-xl shadow-xl">
+                  <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 mb-4">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <div>
+                      <h2 className="text-sm font-bold tracking-tight text-[var(--text-primary)]">Global Market Screener Suite</h2>
+                      <p className="text-[10px] text-[var(--text-secondary)] font-medium lowercase tracking-tighter mt-0.5">Scan the universe of stocks for technical patterns and buy/sell signals</p>
+                    </div>
+                  </div>
+                  <Tabs defaultValue="vcp">
+                    <TabsList className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-1 py-1 h-auto min-h-[40px] mb-4 gap-1 flex-wrap w-fit">
+                      {[
+                        { value: "vcp", label: "⚡ VCP & RS Scan" },
+                        { value: "ep", label: "🔥 EP Scanner" },
+                        { value: "orb", label: "⏱️ 15m ORB" },
+                        { value: "momentum", label: "🚀 Momentum" },
+                        { value: "wma", label: "📈 WMA 44" },
+                        { value: "atr", label: "📊 ATR Extensions" },
+                        { value: "ema", label: "⛓️ EMA 10/20 Cross" },
+                        { value: "breakout", label: "🏆 Multi-Year Breakout" },
+                      ].map(({ value, label }) => (
+                        <TabsTrigger
+                          key={value}
+                          value={value}
+                          className="text-xs font-semibold data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-[var(--text-secondary)] rounded-md px-4 py-2 flex items-center transition-all cursor-pointer"
+                        >
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
 
-                  <TabsContent value="orb">
-                    <ORBScannerTab onSelect={setSymbol} />
-                  </TabsContent>
+                    <TabsContent value="vcp">
+                      <VCPScannerTab onSelect={setSymbol} />
+                    </TabsContent>
 
-                  <TabsContent value="momentum">
-                    <MomentumBurstTab onSelect={setSymbol} />
-                  </TabsContent>
+                    <TabsContent value="ep">
+                      <EPScannerTab onSelect={setSymbol} />
+                    </TabsContent>
 
-                  <TabsContent value="wma">
-                    <WMACrossoverTab onSelect={setSymbol} />
-                  </TabsContent>
-                </Tabs>
+                    <TabsContent value="orb">
+                      <ORBScannerTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="momentum">
+                      <MomentumBurstTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="wma">
+                      <WMACrossoverTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="atr">
+                      <ATRExtensionTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="ema">
+                      <EMACrossoverTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="breakout">
+                      <BreakoutScannerTab onSelect={setSymbol} />
+                    </TabsContent>
+                  </Tabs>
+                </div>
               </motion.div>
             </AnimatePresence>
           </main>
 
           {/* Footer */}
-          <footer className="text-center py-4 text-[10px] text-zinc-600 border-t border-zinc-800/40">
+          <footer className="text-center py-4 text-[10px] text-[var(--text-muted)] border-t border-[var(--border-subtle)]">
             Data via Financial Datasets AI · Nifty 500 constituents · For informational purposes only
           </footer>
         </>

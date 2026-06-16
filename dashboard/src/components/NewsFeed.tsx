@@ -27,7 +27,7 @@ const sentimentConfig = {
 
 export function NewsFeed({ news, loading }: NewsFeedProps) {
   return (
-    <div className="glass-card rounded-2xl p-5">
+    <div className="surface-card rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-4">
         <Newspaper className="h-4 w-4 text-violet-400" />
         <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Latest News</h2>

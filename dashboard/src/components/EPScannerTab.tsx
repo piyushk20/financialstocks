@@ -21,7 +21,7 @@ export function EPScannerTab({ onSelect }: { onSelect?: (symbol: string) => void
   const [matches, setMatches] = useState<EPMatch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  const [universe, setUniverse] = useState<"nifty500" | "all">("nifty500");
+  const [universe, setUniverse] = useState<"nifty500" | "large" | "mid" | "small" | "micro" | "all">("nifty500");
   const [topN, setTopN] = useState(50);
 
   const handleScan = async () => {
@@ -30,9 +30,13 @@ export function EPScannerTab({ onSelect }: { onSelect?: (symbol: string) => void
     setMatches(null);
 
     try {
-      const symbols = universe === "nifty500"
-        ? NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity").map(s => s.symbol)
-        : NSE500.map(s => s.symbol);
+      let filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity");
+      if (universe === "nifty500") {
+        filteredStocks = filteredStocks.filter(s => (s as any).cap !== "micro");
+      } else if (universe === "large" || universe === "mid" || universe === "small" || universe === "micro") {
+        filteredStocks = filteredStocks.filter(s => (s as any).cap === universe);
+      }
+      const symbols = filteredStocks.map(s => s.symbol);
 
       const res = await fetch("/api/ep-scanner", {
         method: "POST",
@@ -54,7 +58,7 @@ export function EPScannerTab({ onSelect }: { onSelect?: (symbol: string) => void
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 border border-zinc-800/50 space-y-6">
+    <div className="surface-card rounded-2xl p-6 border border-zinc-800/50 space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
@@ -84,11 +88,15 @@ export function EPScannerTab({ onSelect }: { onSelect?: (symbol: string) => void
           <label className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Universe</label>
           <select 
             value={universe} 
-            onChange={e => setUniverse(e.target.value as "nifty500" | "all")}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-orange-500 outline-none"
+            onChange={e => setUniverse(e.target.value as any)}
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-orange-500 outline-none font-medium"
           >
-            <option value="nifty500">Nifty 500 Stocks</option>
-            <option value="all">Full Watchlist</option>
+            <option value="nifty500">Nifty 500 Universe</option>
+            <option value="large">Large Cap Stocks</option>
+            <option value="mid">Mid Cap Stocks</option>
+            <option value="small">Small Cap Stocks</option>
+            <option value="micro">Micro Cap Stocks</option>
+            <option value="all">All Watchlist Stocks</option>
           </select>
         </div>
         <div className="space-y-1.5 flex-1 min-w-[150px]">

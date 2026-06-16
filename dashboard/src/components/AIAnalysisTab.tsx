@@ -113,7 +113,7 @@ export function AIAnalysisTab({
   }
 
   return (
-    <div ref={scrollRef} className="glass-card rounded-2xl p-5 min-h-[400px] max-h-[600px] overflow-y-auto custom-scrollbar transition-all">
+    <div ref={scrollRef} className="surface-card rounded-2xl p-5 min-h-[400px] max-h-[600px] overflow-y-auto custom-scrollbar transition-all">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-violet-400" />

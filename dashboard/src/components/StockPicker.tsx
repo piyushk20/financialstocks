@@ -18,7 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { NSE500, SECTORS, type StockEntry } from "@/data/nse500";
+import { NSE500, SECTORS, CAP_CATEGORIES, type StockEntry } from "@/data/nse500";
 
 interface StockPickerProps {
   value: string;
@@ -28,8 +28,22 @@ interface StockPickerProps {
 export function StockPicker({ value, onChange }: StockPickerProps) {
   const [open, setOpen] = useState(false);
   const [sector, setSector] = useState<string | null>(null);
+  const [cap, setCap] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  const filtered = sector ? NSE500.filter((s) => s.sector === sector) : NSE500;
+  const filtered = NSE500.filter((s) => {
+    const matchesSector = !sector || s.sector === sector;
+    const matchesCap = !cap || (s as any).cap === cap;
+    
+    // Controlled React search filtering
+    const cleanSearch = search.trim().toLowerCase();
+    const matchesSearch = !cleanSearch || 
+      s.symbol.toLowerCase().includes(cleanSearch) || 
+      s.name.toLowerCase().includes(cleanSearch);
+      
+    return matchesSector && matchesCap && matchesSearch;
+  });
+
   const current = NSE500.find((s) => s.symbol === value);
 
   return (
@@ -39,7 +53,10 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
           <TrendingUp className="h-4 w-4 text-violet-400" />
           <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Stock</span>
         </div>
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (isOpen) setSearch(""); // Reset search when opening
+        }}>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
@@ -59,8 +76,10 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-80 p-0 bg-zinc-900 border-zinc-700" align="start">
-            <Command className="bg-zinc-900">
+            <Command shouldFilter={false} className="bg-zinc-900">
               <CommandInput
+                value={search}
+                onValueChange={setSearch}
                 placeholder="Search ticker or company…"
                 className="h-9 bg-zinc-900 text-zinc-100"
               />
@@ -102,33 +121,68 @@ export function StockPicker({ value, onChange }: StockPickerProps) {
           </PopoverContent>
         </Popover>
       </div>
-      {/* Sector filter chips */}
-      <div className="flex gap-1.5 flex-wrap">
-        <button
-          onClick={() => setSector(null)}
-          className={cn(
-            "px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border",
-            sector === null
-              ? "bg-violet-600 border-violet-500 text-white"
-              : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500"
-          )}
-        >
-          All
-        </button>
-        {SECTORS.map((s) => (
+      {/* Market Cap filter chips */}
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Market Cap</span>
+        <div className="flex gap-1.5 flex-wrap">
           <button
-            key={s}
-            onClick={() => setSector(sector === s ? null : s)}
+            onClick={() => setCap(null)}
             className={cn(
               "px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border",
-              sector === s
+              cap === null
                 ? "bg-violet-600 border-violet-500 text-white"
                 : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500"
             )}
           >
-            {s}
+            All Caps
           </button>
-        ))}
+          {CAP_CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCap(cap === c ? null : c)}
+              className={cn(
+                "px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border capitalize",
+                cap === c
+                  ? "bg-violet-600 border-violet-500 text-white"
+                  : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+              )}
+            >
+              {c === "large" ? "Large Cap" : c === "mid" ? "Mid Cap" : c === "small" ? "Small Cap" : "Micro Cap"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Sector filter chips */}
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Sector</span>
+        <div className="flex gap-1.5 flex-wrap">
+          <button
+            onClick={() => setSector(null)}
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border",
+              sector === null
+                ? "bg-violet-600 border-violet-500 text-white"
+                : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+            )}
+          >
+            All Sectors
+          </button>
+          {SECTORS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSector(sector === s ? null : s)}
+              className={cn(
+                "px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border",
+                sector === s
+                  ? "bg-violet-600 border-violet-500 text-white"
+                  : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
