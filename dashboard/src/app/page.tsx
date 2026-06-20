@@ -22,6 +22,9 @@ import PivotLevelsTab from "@/components/PivotLevelsTab";
 import { ForecastingTab } from "@/components/ForecastingTab";
 import { EMACrossoverTab } from "@/components/EMACrossoverTab";
 import { BreakoutScannerTab } from "@/components/BreakoutScannerTab";
+import { RSLeaderboardTab } from "@/components/RSLeaderboardTab";
+import { FOMomentumScannerTab } from "@/components/FOMomentumScannerTab";
+
 import { NSE500 } from "@/data/nse500";
 import { NSE200 } from "@/data/nse200";
 import { BarChart3 } from "lucide-react";
@@ -297,6 +300,8 @@ export default function Dashboard() {
                         { value: "atr", label: "📊 ATR Extensions" },
                         { value: "ema", label: "⛓️ EMA 10/20 Cross" },
                         { value: "breakout", label: "🏆 Multi-Year Breakout" },
+                        { value: "rs", label: "📊 RS Leaderboard" },
+                        { value: "fo-momentum", label: "⚡ F&O Momentum" },
                       ].map(({ value, label }) => (
                         <TabsTrigger
                           key={value}
@@ -338,6 +343,14 @@ export default function Dashboard() {
 
                     <TabsContent value="breakout">
                       <BreakoutScannerTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="rs">
+                      <RSLeaderboardTab onSelect={setSymbol} />
+                    </TabsContent>
+
+                    <TabsContent value="fo-momentum">
+                      <FOMomentumScannerTab onSelect={setSymbol} />
                     </TabsContent>
                   </Tabs>
                 </div>

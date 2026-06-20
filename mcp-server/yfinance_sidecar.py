@@ -83,6 +83,9 @@ HISTORY_TTL    = int(os.getenv("HISTORY_TTL",    900))   # 15 minutes
 FINANCIALS_TTL = int(os.getenv("FINANCIALS_TTL", 7200))  # 2 hours
 FORECAST_TTL  = int(os.getenv("FORECAST_TTL",   900))   # 15 minutes
 BAD_TICKER_TTL = int(os.getenv("BAD_TICKER_TTL", 3600))  # 1 hour
+RS_TTL         = int(os.getenv("RS_TTL",         3600))  # 1 hour  (RS changes slowly)
+INTRADAY_TTL   = int(os.getenv("INTRADAY_TTL",    300))  # 5 minutes
+
 
 
 def _cache_get(key: str):
@@ -661,6 +664,19 @@ class ORBRequest(BaseModel):
     max_range_atr_ratio: float = 2.0
     min_rr: float = 1.5
     top_n: int = 50
+
+class RSRequest(BaseModel):
+    symbols: list[str]
+    index_symbol: str = "^NSEI"
+    top_n: int = 200
+    min_rating: int = 0   # filter: only return stocks with RS Rating >= this value
+
+class FOMomentumRequest(BaseModel):
+    symbols: list[str] = []
+    pct_change_threshold: float = 2.0
+    min_volume_threshold: int = 100000
+    top_n: int = 100
+
 
 def _scan_momentum(params: MomentumRequest) -> list:
     if not params.symbols:
@@ -1973,8 +1989,469 @@ async def forecast_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# ---------------------------------------------------------------------------
+# IBD-style RS Rating — percentile rank 1-99 across the scan universe
+# Formula: 40% × 3-month alpha + 20% × 6-month + 20% × 9-month + 20% × 12-month
+# Alpha = stock return - benchmark return for each window
+# ---------------------------------------------------------------------------
+
+def _compute_ibd_rs(symbols: list, index_symbol: str = "^NSEI") -> dict:
+    """
+    Downloads 1 year of daily closes for all symbols + benchmark in batches.
+    Returns dict: symbol -> {rs_rating, price, p3, p6, p9, p12, raw_score}
+    rs_rating is a percentile rank 1-99 across all symbols in the batch.
+    """
+    _PERIODS  = {"p3": 63, "p6": 126, "p9": 189, "p12": 252}
+    _WEIGHTS  = {"p3": 0.40, "p6": 0.20, "p9": 0.20, "p12": 0.20}
+    _BATCH    = 50
+
+    # -- 1. Download closes in batches (include benchmark in every batch) ----
+    all_tickers = list(dict.fromkeys([index_symbol] + symbols))  # dedup, order preserved
+    closes: dict = {}
+
+    for i in range(0, len(all_tickers), _BATCH):
+        batch = all_tickers[i : i + _BATCH]
+        # Always include the index in each batch for correct multi-index extraction
+        batch_with_idx = list(dict.fromkeys([index_symbol] + batch))
+        try:
+            df = yf.download(
+                batch_with_idx,
+                period="1y",
+                interval="1d",
+                group_by="ticker",
+                threads=True,
+                auto_adjust=True,
+                progress=False,
+                timeout=60,
+            )
+        except Exception as e:
+            logger.error("RS batch download error: %s", e)
+            continue
+
+        is_multi = isinstance(df.columns, pd.MultiIndex)
+        for sym in batch_with_idx:
+            if sym in closes:
+                continue
+            try:
+                if is_multi:
+                    if sym not in df.columns.get_level_values(0):
+                        continue
+                    ser = df[sym]["Close"].dropna()
+                else:
+                    ser = df["Close"].dropna()
+                if not ser.empty:
+                    closes[sym] = ser
+            except Exception:
+                pass
+
+    # -- 2. Benchmark return per window -------------------------------------
+    idx_ser = closes.get(index_symbol)
+    idx_perf: dict = {}
+    for pk, days in _PERIODS.items():
+        if idx_ser is not None and len(idx_ser) > days:
+            idx_perf[pk] = float(idx_ser.iloc[-1]) / float(idx_ser.iloc[-days]) - 1.0
+        else:
+            idx_perf[pk] = 0.0
+
+    # -- 3. Per-stock raw score & metadata ----------------------------------
+    raw_scores: dict = {}
+    stock_data: dict = {}
+
+    for sym in symbols:
+        ser = closes.get(sym)
+        if ser is None or len(ser) < 63:          # need at least 3-month window
+            continue
+        alpha: dict = {}
+        for pk, days in _PERIODS.items():
+            if len(ser) > days:
+                s_ret = float(ser.iloc[-1]) / float(ser.iloc[-days]) - 1.0
+                alpha[pk] = s_ret - idx_perf[pk]
+            else:
+                alpha[pk] = 0.0
+        raw = sum(_WEIGHTS[pk] * alpha[pk] for pk in _PERIODS)
+        raw_scores[sym] = raw
+        stock_data[sym] = {
+            "price":     round(float(ser.iloc[-1]), 2),
+            "p3":        round(alpha.get("p3",  0.0) * 100, 2),
+            "p6":        round(alpha.get("p6",  0.0) * 100, 2),
+            "p9":        round(alpha.get("p9",  0.0) * 100, 2),
+            "p12":       round(alpha.get("p12", 0.0) * 100, 2),
+            "raw_score": round(raw * 100, 4),
+        }
+
+    # -- 4. Percentile rank 1-99 -------------------------------------------
+    if raw_scores:
+        sorted_syms = sorted(raw_scores, key=lambda s: raw_scores[s])
+        n = len(sorted_syms)
+        for rank_i, sym in enumerate(sorted_syms):
+            # Map [0, n-1] linearly to [1, 99]
+            pct = round((rank_i / max(n - 1, 1)) * 98 + 1)
+            stock_data[sym]["rs_rating"] = pct
+    else:
+        for sym in stock_data:
+            stock_data[sym]["rs_rating"] = 0
+
+    return stock_data
+
+
+@app.post("/rs-scanner")
+async def rs_scanner(req: RSRequest = Body(...)):
+    """
+    IBD-style RS Rating scanner.
+    Accepts a list of symbols + optional benchmark (default ^NSEI).
+    Returns each stock's RS Rating (1-99 percentile), price, and per-period alpha.
+    Results are cached for RS_TTL seconds (default 1 hour).
+    """
+    if not req.symbols:
+        return {"ratings": {}, "universe_size": 0}
+
+    # Cache key is a fingerprint of the universe + benchmark
+    sorted_syms_key = ",".join(sorted(req.symbols))
+    cache_key = f"rs:{hash(sorted_syms_key)}:{req.index_symbol}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        # Still apply min_rating + top_n filter on cached payload
+        all_ratings = cached.get("ratings", {})
+        filtered = {
+            sym: d for sym, d in all_ratings.items()
+            if d.get("rs_rating", 0) >= req.min_rating
+        }
+        top = dict(
+            list(sorted(filtered.items(), key=lambda x: x[1].get("rs_rating", 0), reverse=True))[: req.top_n]
+        )
+        return {"ratings": top, "universe_size": cached.get("universe_size", len(all_ratings))}
+
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(
+            executor, _compute_ibd_rs, req.symbols, req.index_symbol
+        )
+        # Cache the full universe result (no filter applied yet)
+        full_payload = {"ratings": result, "universe_size": len(result)}
+        _cache_set(cache_key, full_payload, RS_TTL)
+
+        # Apply filter + top_n for response
+        filtered = {
+            sym: d for sym, d in result.items()
+            if d.get("rs_rating", 0) >= req.min_rating
+        }
+        top = dict(
+            list(sorted(filtered.items(), key=lambda x: x[1].get("rs_rating", 0), reverse=True))[: req.top_n]
+        )
+        return {"ratings": top, "universe_size": len(result)}
+
+    except Exception as e:
+        logger.error("RS scanner error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ---------------------------------------------------------------------------
+# Single-stock RS Score (no full universe needed) — used by PriceHeader badge
+# Returns the IBD-weighted alpha vs benchmark, mapped to a 1-99 scale via a
+# sigmoid so the badge is always populated without running a full scan.
+# Cached with SNAPSHOT_TTL (5 min) to stay reasonably fresh.
+# ---------------------------------------------------------------------------
+
+def _compute_single_rs(ticker_sym: str, index_symbol: str = "^NSEI") -> dict:
+    """
+    Downloads 1y of closes for one stock + benchmark.
+    Returns: raw_score (%), p3/p6/p9/p12 alphas (%), and an estimated rs_rating (1-99)
+    derived from a sigmoid centred on 0 alpha.
+    The sigmoid gives ~50 for a stock matching the index exactly, ~80 for +15% alpha,
+    ~20 for -15% alpha — a reasonable single-stock approximation.
+    """
+    import math
+
+    cache_key = f"rs1:{ticker_sym}:{index_symbol}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    resolved = _resolve_ticker(ticker_sym)
+    try:
+        df = yf.download(
+            [resolved, index_symbol],
+            period="1y",
+            interval="1d",
+            group_by="ticker",
+            threads=True,
+            auto_adjust=True,
+            progress=False,
+            timeout=30,
+        )
+    except Exception as e:
+        logger.error("rs-score download error for %s: %s", ticker_sym, e)
+        return {}
+
+    is_multi = isinstance(df.columns, pd.MultiIndex)
+
+    def _get_close(sym):
+        try:
+            if is_multi:
+                if sym not in df.columns.get_level_values(0):
+                    return None
+                return df[sym]["Close"].dropna()
+            else:
+                return df["Close"].dropna()
+        except Exception:
+            return None
+
+    stock_close = _get_close(resolved)
+    idx_close   = _get_close(index_symbol)
+
+    if stock_close is None or idx_close is None or len(stock_close) < 63:
+        return {}
+
+    PERIODS = {"p3": 63, "p6": 126, "p9": 189, "p12": 252}
+    WEIGHTS = {"p3": 0.40, "p6": 0.20, "p9": 0.20, "p12": 0.20}
+
+    alpha = {}
+    for pk, days in PERIODS.items():
+        if len(stock_close) > days and len(idx_close) > days:
+            s_ret = float(stock_close.iloc[-1]) / float(stock_close.iloc[-days]) - 1.0
+            i_ret = float(idx_close.iloc[-1])   / float(idx_close.iloc[-days])   - 1.0
+            alpha[pk] = s_ret - i_ret
+        else:
+            alpha[pk] = 0.0
+
+    raw = sum(WEIGHTS[pk] * alpha[pk] for pk in PERIODS)
+
+    # Map raw alpha → 1-99 via sigmoid (k=10 → ±20% alpha → ~88/12 rating)
+    k = 10.0
+    sigmoid = 1.0 / (1.0 + math.exp(-k * raw))
+    rs_rating = max(1, min(99, round(sigmoid * 98 + 1)))
+
+    result = {
+        "ticker":     ticker_sym,
+        "rs_rating":  rs_rating,
+        "raw_score":  round(raw * 100, 4),
+        "p3":         round(alpha.get("p3",  0.0) * 100, 2),
+        "p6":         round(alpha.get("p6",  0.0) * 100, 2),
+        "p9":         round(alpha.get("p9",  0.0) * 100, 2),
+        "p12":        round(alpha.get("p12", 0.0) * 100, 2),
+        "note":       "single-stock estimate; run RS Leaderboard for percentile vs full universe",
+    }
+    _cache_set(cache_key, result, SNAPSHOT_TTL)
+    return result
+
+
+@app.get("/rs-score")
+async def rs_score_single(
+    ticker: str = Query(..., description="Ticker symbol e.g. RELIANCE.NS"),
+    index:  str = Query("^NSEI", description="Benchmark index"),
+):
+    """
+    Lightweight single-stock RS Score — returns in ~5-10s.
+    Always populated; no full universe scan required.
+    """
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker is required")
+
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(
+            executor, _compute_single_rs, ticker, index
+        )
+        if not result:
+            raise HTTPException(status_code=404, detail="Insufficient data for RS calculation")
+        return result
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error("rs-score error for %s: %s", ticker, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_fo_stocks() -> list[str]:
+    """Download latest F&O stocks from NSE and format for yfinance (.NS)"""
+    cache_key = "fo_stocks_list"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Try local Dhan F&O CSV first if available in user's Downloads directory
+    try:
+        import os
+        dhan_path = os.path.expanduser("~/Downloads/Dhan - Nse Fno Lot Size.csv")
+        if os.path.exists(dhan_path):
+            df_csv = pd.read_csv(dhan_path)
+            if "Symbol" in df_csv.columns:
+                symbols = df_csv["Symbol"].dropna().unique().tolist()
+                exclude = ["BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTY", "NIFTYNXT50"]
+                fo_symbols = [s.strip() + ".NS" for s in symbols if s.strip() not in exclude]
+                _cache_set(cache_key, fo_symbols, 86400)
+                logger.info("Loaded %d F&O stocks from local Dhan CSV: %s", len(fo_symbols), dhan_path)
+                return fo_symbols
+    except Exception as e:
+        logger.error("Failed to read F&O stocks from local Dhan CSV: %s", e)
+
+    # Try NSE India official CSV next
+    try:
+        fo_url = "https://archives.nseindia.com/content/fo/fo_mktlots.csv"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        r = requests.get(fo_url, headers=headers, timeout=15)
+        if r.status_code == 200:
+            import io
+            df = pd.read_csv(io.StringIO(r.text), on_bad_lines='skip')
+            df.columns = [c.strip() for c in df.columns]
+            if 'SYMBOL' in df.columns:
+                stocks = df['SYMBOL'].dropna().unique().tolist()
+                fo_symbols = []
+                for s in stocks:
+                    s_clean = s.strip()
+                    if s_clean and not s_clean.startswith("NIFTY") and s_clean != "UNDERLYING":
+                        fo_symbols.append(s_clean + ".NS")
+                
+                # Cache for 24h
+                _cache_set(cache_key, fo_symbols, 86400)
+                logger.info("Loaded %d F&O stocks from NSE CSV", len(fo_symbols))
+                return fo_symbols
+    except Exception as e:
+        logger.error("Failed to fetch F&O list from NSE: %s", e)
+
+    # Fallback to popular liquid F&O stocks
+    fallback = [
+        'RELIANCE.NS', 'HDFCBANK.NS', 'INFY.NS', 'TCS.NS', 'ICICIBANK.NS',
+        'KOTAKBANK.NS', 'LT.NS', 'SBIN.NS', 'BHARTIARTL.NS', 'ITC.NS',
+        'AXISBANK.NS', 'BAJFINANCE.NS', 'MARUTI.NS', 'HCLTECH.NS', 'SUNPHARMA.NS',
+        'TATAMOTORS.NS', 'M&M.NS', 'NTPC.NS', 'POWERGRID.NS', 'ONGC.NS',
+        'COALINDIA.NS', 'ADANIENT.NS', 'ADANIPORTS.NS', 'JSWSTEEL.NS',
+        'TATASTEEL.NS', 'HINDALCO.NS', 'GRASIM.NS', 'ULTRACEMCO.NS', 'NESTLEIND.NS'
+    ]
+    return fallback
+
+
+
+def _scan_fo_momentum(symbols: list[str], pct_change_threshold: float, min_volume_threshold: int, top_n: int) -> list:
+    active_symbols = [s for s in symbols if s not in KNOWN_BAD_TICKERS]
+    
+    # Download 5d 15m data in batches of 50 to prevent timeouts/limits
+    _BATCH = 50
+    results = []
+    
+    for i in range(0, len(active_symbols), _BATCH):
+        batch = active_symbols[i : i + _BATCH]
+        try:
+            df = yf.download(
+                batch,
+                period="5d",
+                interval="15m",
+                group_by="ticker",
+                threads=True,
+                auto_adjust=True,
+                progress=False,
+                timeout=30
+            )
+        except Exception as e:
+            logger.error("F&O Momentum download batch error: %s", e)
+            continue
+
+        is_multi = isinstance(df.columns, pd.MultiIndex)
+        
+        for symbol in batch:
+            try:
+                if is_multi:
+                    if symbol not in df.columns.get_level_values(0):
+                        continue
+                    ticker_df = df[symbol].dropna(how="all")
+                else:
+                    ticker_df = df.dropna(how="all")
+                
+                if len(ticker_df) < 20:  # Need enough data to segment today vs yesterday
+                    continue
+                    
+                dates = ticker_df.index.date
+                today = dates[-1]
+                
+                today_df = ticker_df[dates == today]
+                prev_df = ticker_df[dates < today]
+                
+                if len(today_df) < 1 or prev_df.empty:
+                    continue
+                    
+                # First candle of the day
+                first_candle = today_df.iloc[0]
+                first_volume = _safe_float(first_candle["Volume"])
+                first_close = _safe_float(first_candle["Close"])
+                first_open = _safe_float(first_candle["Open"])
+                
+                if not all([first_volume, first_close, first_open]) or first_open == 0:
+                    continue
+                    
+                # Max 15m volume of the previous day
+                prev_candles = prev_df.tail(30)  # Safe buffer matching previous trading session
+                max_prev_volume = _safe_float(prev_candles["Volume"].max())
+                
+                if not max_prev_volume or max_prev_volume == 0:
+                    continue
+                    
+                current_pct = ((first_close - first_open) / first_open) * 100
+                volume_ratio = first_volume / max_prev_volume
+                
+                # Filters
+                if (first_volume >= min_volume_threshold and 
+                    volume_ratio > 1.0 and 
+                    abs(current_pct) >= pct_change_threshold):
+                    
+                    direction = "BULLISH" if current_pct > 0 else "BEARISH"
+                    results.append({
+                        "symbol": symbol,
+                        "name": symbol.replace(".NS", ""),
+                        "direction": direction,
+                        "pct_change": round(current_pct, 2),
+                        "first_15m_vol": int(first_volume),
+                        "prev_max_vol": int(max_prev_volume),
+                        "volume_ratio": round(volume_ratio, 2),
+                        "first_open": round(first_open, 2),
+                        "first_close": round(first_close, 2),
+                        "timestamp": first_candle.name.strftime('%H:%M') if hasattr(first_candle.name, 'strftime') else str(first_candle.name)[11:16]
+                    })
+            except Exception:
+                continue
+                
+    # Sort by Volume Ratio and absolute % Change
+    results.sort(key=lambda x: (x["volume_ratio"], abs(x["pct_change"])), reverse=True)
+    return results[:top_n]
+
+
+@app.post("/fo-momentum-scanner")
+async def fo_momentum_scanner(req: FOMomentumRequest = Body(...)):
+    symbols = req.symbols
+    if not symbols:
+        symbols = _get_fo_stocks()
+
+    cache_key = f"fo_momentum_scan:{req.pct_change_threshold}:{req.min_volume_threshold}:{req.top_n}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.info("Returning cached FO momentum scanner results")
+        return cached
+
+    loop = asyncio.get_running_loop()
+    try:
+        results = await loop.run_in_executor(
+            executor,
+            _scan_fo_momentum,
+            symbols,
+            req.pct_change_threshold,
+            req.min_volume_threshold,
+            req.top_n
+        )
+        response_payload = {"matches": results}
+        _cache_set(cache_key, response_payload, INTRADAY_TTL)
+        return response_payload
+    except Exception as e:
+        logger.error("FO Momentum scanner error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
+
 async def health():
+
     cache_size = len(_cache)
     return {"status": "ok", "time": datetime.now().isoformat(), "cache_entries": cache_size}
 

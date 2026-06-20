@@ -1,10 +1,14 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import useSWR from "swr";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, TrendingDown, Activity, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Zap } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { type PriceSnapshot } from "@/lib/financialDatasets";
 import { NSE500 } from "@/data/nse500";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface PriceHeaderProps {
   symbol: string;
@@ -31,6 +35,51 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
   const isUp = (snapshot?.change ?? 0) >= 0;
   const isGlobal = symbol.includes("=F");
   const currencySymbol = isGlobal ? "$" : "₹";
+
+  // ── RS Rating: two-tier strategy ─────────────────────────────────────────
+  // Tier 1: full percentile from localStorage (written by RSLeaderboardTab)
+  const [cachedRating, setCachedRating] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("rs_ratings");
+      if (stored) {
+        const map: Record<string, number> = JSON.parse(stored);
+        setCachedRating(map[symbol] ?? null);
+      } else {
+        setCachedRating(null);
+      }
+    } catch {
+      setCachedRating(null);
+    }
+  }, [symbol]);
+
+  // Tier 2: single-stock auto-fetch (always available, ~5-10s)
+  // Only fetch for NSE equities, not futures/indices
+  const skipFetch = isGlobal || symbol.startsWith("^");
+  const { data: rsData, isLoading: rsLoading } = useSWR<{
+    rs_rating: number;
+    raw_score: number;
+    p3: number; p6: number; p9: number; p12: number;
+  }>(
+    skipFetch ? null : `/api/rs-score/${encodeURIComponent(symbol)}`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 300_000, // 5 min (matches backend cache TTL)
+    }
+  );
+
+  // Use cached full-scan rating if available, otherwise fall back to single-stock estimate
+  const rsRating: number | null = cachedRating ?? rsData?.rs_rating ?? null;
+  const isFullScan = cachedRating != null; // true = percentile, false = sigmoid estimate
+
+  function rsRatingStyle(r: number): string {
+    if (r >= 90) return "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+    if (r >= 80) return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+    if (r >= 70) return "bg-lime-500/10 text-lime-400 border-lime-500/30";
+    if (r >= 50) return "bg-amber-500/10 text-amber-400 border-amber-500/30";
+    return "bg-rose-500/10 text-rose-400 border-rose-500/30";
+  }
 
   if (loading) {
     return (
@@ -66,9 +115,37 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
           </div>
           <h1 className="text-lg font-semibold text-[var(--text-primary)]">{stock?.name ?? symbol}</h1>
         </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold ${isUp ? "bg-[var(--up)]/10 text-[var(--up)]" : "bg-[var(--down)]/10 text-[var(--down)]"}`}>
-          {isUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-          {isUp ? "Bullish" : "Bearish"}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold ${isUp ? "bg-[var(--up)]/10 text-[var(--up)]" : "bg-[var(--down)]/10 text-[var(--down)]"}`}>
+            {isUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+            {isUp ? "Bullish" : "Bearish"}
+          </div>
+          {/* RS Rating badge — auto-populated via single-stock fetch */}
+          {!isGlobal && !symbol.startsWith("^") && (
+            <div
+              title={
+                isFullScan
+                  ? `IBD RS Rating ${rsRating}/99 — full percentile vs NSE 500 universe`
+                  : rsRating != null
+                  ? `RS Score ${rsRating}/99 — sigmoid estimate vs Nifty 50. Run RS Leaderboard tab for full percentile ranking`
+                  : "Computing RS Score…"
+              }
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                rsLoading && rsRating == null
+                  ? "bg-zinc-800/40 text-zinc-600 border-zinc-700/30 animate-pulse"
+                  : rsRating != null
+                  ? rsRatingStyle(rsRating)
+                  : "bg-zinc-800/60 text-zinc-500 border-zinc-700/40"
+              }`}
+            >
+              <Zap className="h-3 w-3" />
+              {rsLoading && rsRating == null
+                ? "RS …"
+                : rsRating != null
+                ? `RS ${rsRating}${!isFullScan ? "~" : ""}`
+                : "RS N/A"}
+            </div>
+          )}
         </div>
       </div>
 
