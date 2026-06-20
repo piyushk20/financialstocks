@@ -39,6 +39,14 @@ export interface PriceSnapshot {
   change: number;
   change_percent: number;
   time: string;
+  market_cap?: number | null;
+  pe_ratio?: number | null;
+  pb_ratio?: number | null;
+  fifty_two_week_high?: number | null;
+  fifty_two_week_low?: number | null;
+  eps?: number | null;
+  dividend_yield?: number | null;
+  screener_ratios?: Record<string, string> | null;
 }
 
 export interface OHLCV {

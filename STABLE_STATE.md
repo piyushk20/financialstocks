@@ -9,4 +9,6 @@
 - **Port Conflict Note**: Port `3015` was previously used but moved to `3020` per user request to avoid conflicts with other apps.
 - **Dependency Note**: Uses `yfinance` and `FastAPI` for the backend sidecar.
 - **Resilient Financial Mapping**: Updated the sidecar to support specialized bank/financial accounting formats by mapping indices like `gross_profit`, `ebitda`, `operating_income`, `cash_and_equivalents`, and `capital_expenditures` to their resilient bank-specific equivalents, preventing blank `—` values on the UI.
+- **Screener.in Scraper**: Integrated live valuation & key ratios (ROCE, ROE, PE, PB, Dividend Yield) by scraping Screener.in as a fallback when yfinance yields missing or NaN fields, rendering them in the `PriceHeader` UI.
+
 

@@ -62,9 +62,9 @@ export function BreakoutScannerTab({ onSelect }: { onSelect?: (symbol: string) =
       if (universe === "nifty50") {
         filteredStocks = NSE500.filter(s => NIFTY50_SYMBOLS.includes(s.symbol) || NIFTY50_SYMBOLS.includes(s.symbol.replace(".NS", "")));
       } else if (universe === "nifty500") {
-        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap !== "micro");
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && s.cap !== "micro");
       } else if (universe === "large" || universe === "mid" || universe === "small" || universe === "micro") {
-        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && (s as any).cap === universe);
+        filteredStocks = NSE500.filter(s => s.sector !== "Index" && s.sector !== "Commodity" && s.cap === universe);
       } else {
         filteredStocks = NSE500.filter(s => s.sector === "Index");
       }
@@ -115,7 +115,7 @@ export function BreakoutScannerTab({ onSelect }: { onSelect?: (symbol: string) =
             <label className="text-xs text-zinc-500 font-medium lowercase tracking-tighter">Universe</label>
             <select 
               value={universe} 
-              onChange={e => setUniverse(e.target.value as any)}
+              onChange={e => setUniverse(e.target.value as "nifty50" | "nifty500" | "large" | "mid" | "small" | "micro" | "sectoral")}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none font-medium"
             >
               <option value="nifty50">Nifty 50</option>
@@ -132,7 +132,7 @@ export function BreakoutScannerTab({ onSelect }: { onSelect?: (symbol: string) =
             <label className="text-xs text-zinc-500 font-medium lowercase tracking-tighter">Breakout Window</label>
             <select 
               value={breakout} 
-              onChange={e => setBreakout(e.target.value as any)}
+              onChange={e => setBreakout(e.target.value as "1y" | "3y" | "5y")}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none font-medium"
             >
               <option value="1y">1-Year High Breakout</option>
@@ -145,7 +145,7 @@ export function BreakoutScannerTab({ onSelect }: { onSelect?: (symbol: string) =
             <label className="text-xs text-zinc-500 font-medium lowercase tracking-tighter">Timeframe</label>
             <select 
               value={tf} 
-              onChange={e => setTf(e.target.value as any)}
+              onChange={e => setTf(e.target.value as "daily" | "weekly" | "monthly")}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-sm text-zinc-300 p-1.5 focus:border-violet-500 outline-none font-medium"
             >
               <option value="daily">Daily Charts</option>
@@ -447,9 +447,9 @@ export function BreakoutScannerTab({ onSelect }: { onSelect?: (symbol: string) =
                           {/* MCap */}
                           <td className="py-3 px-4 font-mono text-zinc-400">{row.mcap_cr ? `₹${row.mcap_cr.toLocaleString("en-IN")}Cr` : "—"}</td>
                           {/* D/E */}
-                          <td className="py-3 px-4 font-mono text-zinc-400">{row.de_ratio !== null ? row.de_ratio.toFixed(2) : "—"}</td>
+                          <td className="py-3 px-4 font-mono text-zinc-400">{row.de_ratio != null ? row.de_ratio.toFixed(2) : "—"}</td>
                           {/* ROE */}
-                          <td className="py-3 px-4 font-mono text-zinc-400">{row.roe !== null ? `${row.roe.toFixed(1)}%` : "—"}</td>
+                          <td className="py-3 px-4 font-mono text-zinc-400">{row.roe != null ? `${row.roe.toFixed(1)}%` : "—"}</td>
                           {/* Score */}
                           <td className="py-3 px-4 text-right">
                             <span className={`px-2 py-1 rounded-full font-bold font-mono text-[10px] ${

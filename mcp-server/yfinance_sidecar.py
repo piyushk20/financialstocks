@@ -18,6 +18,8 @@ import logging
 import os
 import re
 import time
+import requests
+from bs4 import BeautifulSoup
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
@@ -119,6 +121,98 @@ def _safe_float(v):
         return None
 
 
+def _clean_numeric(s: str) -> str:
+    return s.replace("₹", "").replace("%", "").replace(",", "").strip()
+
+
+def _parse_float_screener(s: str) -> float | None:
+    try:
+        val = _clean_numeric(s)
+        if "Cr." in val:
+            val = val.replace("Cr.", "").strip()
+            return float(val) * 1e7
+        return float(val)
+    except Exception:
+        return None
+
+
+def _scrape_screener(symbol: str) -> dict:
+    symbol_upper = symbol.upper()
+    if symbol_upper.startswith("^") or symbol_upper.endswith("=F") or not ("." in symbol_upper):
+        return {}
+
+    base_sym = symbol_upper.split(".")[0]
+    
+    # Check cache first
+    cache_key = f"screener:{base_sym}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    url = f"https://www.screener.in/company/{base_sym}/consolidated/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
+
+    raw_ratios = {}
+    normalized = {}
+
+    try:
+        session = requests.Session()
+        res = session.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            url = f"https://www.screener.in/company/{base_sym}/"
+            res = session.get(url, headers=headers, timeout=10)
+            
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            for li in soup.select("#top-ratios li"):
+                name_el = li.select_one(".name")
+                value_el = li.select_one(".value")
+                if name_el and value_el:
+                    name_text = name_el.text.strip()
+                    val_text = " ".join(value_el.text.split())
+                    raw_ratios[name_text] = val_text
+
+            pe_str = raw_ratios.get("Stock P/E")
+            if pe_str:
+                normalized["pe_ratio"] = _parse_float_screener(pe_str)
+
+            pb_str = raw_ratios.get("Price to book") or raw_ratios.get("Price to Book")
+            if pb_str:
+                normalized["pb_ratio"] = _parse_float_screener(pb_str)
+
+            div_str = raw_ratios.get("Dividend Yield")
+            if div_str:
+                div_val = _parse_float_screener(div_str)
+                if div_val is not None:
+                    normalized["dividend_yield"] = div_val / 100.0
+
+            mc_str = raw_ratios.get("Market Cap")
+            if mc_str:
+                normalized["market_cap"] = _parse_float_screener(mc_str)
+
+            hl_str = raw_ratios.get("High / Low")
+            if hl_str:
+                parts = hl_str.split("/")
+                normalized["fifty_two_week_high"] = _parse_float_screener(parts[0])
+                if len(parts) > 1:
+                    normalized["fifty_two_week_low"] = _parse_float_screener(parts[1])
+
+            bv_str = raw_ratios.get("Book Value")
+            if bv_str:
+                normalized["book_value"] = _parse_float_screener(bv_str)
+
+            normalized["screener_ratios"] = raw_ratios
+            _cache_set(cache_key, normalized, FINANCIALS_TTL)
+            return normalized
+    except Exception as e:
+        logger.error(f"Error scraping screener.in for {base_sym}: {e}")
+
+    _cache_set(cache_key, {}, 300)
+    return {}
+
+
 def _get_snapshot(ticker_sym: str) -> dict:
     # Check cache first
     cache_key = f"snap:{ticker_sym}"
@@ -160,6 +254,38 @@ def _get_snapshot(ticker_sym: str) -> dict:
     change = round(price - prev_close, 4) if price and prev_close else None
     pct_change = round((change / prev_close) * 100, 4) if change and prev_close else None
 
+    # Fallback to screener values if yfinance returns None or NaN
+    screener_data = {}
+    if ticker_sym.upper().endswith(".NS") or ticker_sym.upper().endswith(".BO"):
+        try:
+            screener_data = _scrape_screener(ticker_sym) or {}
+        except Exception as e:
+            logger.error(f"Screener scraping error during snapshot: {e}")
+
+    mc_val = info.get("marketCap")
+    if mc_val is None or (isinstance(mc_val, float) and pd.isna(mc_val)) or mc_val == 0:
+        mc_val = screener_data.get("market_cap")
+
+    pe_val = _safe_float(info.get("trailingPE"))
+    if pe_val is None or pe_val == 0:
+        pe_val = screener_data.get("pe_ratio")
+
+    pb_val = _safe_float(info.get("priceToBook"))
+    if pb_val is None or pb_val == 0:
+        pb_val = screener_data.get("pb_ratio")
+
+    dy_val = _safe_float(info.get("dividendYield"))
+    if dy_val is None or dy_val == 0:
+        dy_val = screener_data.get("dividend_yield")
+
+    high_val = _safe_float(info.get("fiftyTwoWeekHigh"))
+    if high_val is None or high_val == 0:
+        high_val = screener_data.get("fifty_two_week_high")
+
+    low_val = _safe_float(info.get("fiftyTwoWeekLow"))
+    if low_val is None or low_val == 0:
+        low_val = screener_data.get("fifty_two_week_low")
+
     result = {
         "ticker": ticker_sym,
         "name": info.get("longName") or info.get("shortName") or ticker_sym,
@@ -171,17 +297,18 @@ def _get_snapshot(ticker_sym: str) -> dict:
         "previous_close": prev_close,
         "change": change,
         "change_percent": pct_change,
-        "market_cap": info.get("marketCap"),
-        "pe_ratio": _safe_float(info.get("trailingPE")),
-        "pb_ratio": _safe_float(info.get("priceToBook")),
-        "fifty_two_week_high": _safe_float(info.get("fiftyTwoWeekHigh")),
-        "fifty_two_week_low": _safe_float(info.get("fiftyTwoWeekLow")),
+        "market_cap": mc_val,
+        "pe_ratio": pe_val,
+        "pb_ratio": pb_val,
+        "fifty_two_week_high": high_val,
+        "fifty_two_week_low": low_val,
         "eps": _safe_float(info.get("trailingEps")),
-        "dividend_yield": _safe_float(info.get("dividendYield")),
+        "dividend_yield": dy_val,
         "sector": info.get("sector"),
         "industry": info.get("industry"),
         "currency": info.get("currency", "INR"),
         "exchange": info.get("exchange"),
+        "screener_ratios": screener_data.get("screener_ratios"),
     }
     _cache_set(cache_key, result, SNAPSHOT_TTL)
     return result
@@ -228,6 +355,13 @@ def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
     if cached is not None:
         return cached
 
+    def first_valid(d, *keys):
+        for k in keys:
+            v = d.get(k)
+            if v is not None:
+                return v
+        return None
+
     resolved = _resolve_ticker(ticker_sym)
     try:
         t = yf.Ticker(resolved)
@@ -236,13 +370,6 @@ def _get_financials(ticker_sym: str, period: str = "annual") -> dict:
             if df is None or df.empty:
                 return []
             
-            def first_valid(d, *keys):
-                for k in keys:
-                    v = d.get(k)
-                    if v is not None:
-                        return v
-                return None
-
             rows = []
             for col in df.columns:
                 row = {

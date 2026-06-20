@@ -17,6 +17,15 @@ function fmt(n: number | null | undefined, decimals = 2): string {
   return n.toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+function formatMarketCap(n: number | null | undefined): string {
+  if (n == null || isNaN(n) || n === 0) return "—";
+  const cr = n / 1e7;
+  if (cr >= 100000) {
+    return `₹${(cr / 100000).toFixed(2)} Lakh Cr`;
+  }
+  return `₹${cr.toLocaleString("en-IN", { maximumFractionDigits: 0 })} Cr`;
+}
+
 export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
   const stock = NSE500.find((s) => s.symbol === symbol);
   const isUp = (snapshot?.change ?? 0) >= 0;
@@ -104,6 +113,33 @@ export function PriceHeader({ symbol, snapshot, loading }: PriceHeaderProps) {
         <span>Volume:</span>
         <span className="text-[var(--text-secondary)] font-medium tabular-nums">{snapshot?.volume?.toLocaleString("en-IN") ?? "—"}</span>
       </div>
+
+      {/* Valuation and Ratios Section (only show if it's not a global contract like futures) */}
+      {!isGlobal && (snapshot?.market_cap || snapshot?.pe_ratio || snapshot?.screener_ratios) && (
+        <>
+          <div className="my-4 border-t border-[var(--border-subtle)]" />
+          <div className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
+            <Activity className="h-3 w-3 text-violet-400 animate-pulse" /> Valuation & Key Ratios (via Screener)
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            {[
+              { label: "Market Cap", value: formatMarketCap(snapshot?.market_cap) },
+              { label: "PE Ratio", value: snapshot?.pe_ratio ? snapshot.pe_ratio.toFixed(1) : "—" },
+              { label: "PB Ratio", value: snapshot?.pb_ratio ? snapshot.pb_ratio.toFixed(1) : "—" },
+              { label: "Div Yield", value: snapshot?.dividend_yield != null ? `${(snapshot.dividend_yield * 100).toFixed(2)}%` : "—" },
+              { label: "ROCE", value: snapshot?.screener_ratios?.["ROCE"] || "—" },
+              { label: "ROE", value: snapshot?.screener_ratios?.["ROE"] || "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 hover:border-violet-500/30 transition-all group">
+                <div className="text-[var(--text-muted)] text-[9px] font-medium uppercase tracking-wider mb-1">
+                  {label}
+                </div>
+                <div className="text-[var(--text-primary)] font-semibold text-sm tabular-nums">{value}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
