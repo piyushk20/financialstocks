@@ -21,7 +21,7 @@ export async function GET(
   const { symbol } = await params;
 
   // Validate symbol format before forwarding to sidecar
-  if (!/^[A-Z0-9.\-_^=&]{1,20}$/i.test(symbol)) {
+  if (!/^[A-Z0-9.\-_^=&]{1,25}$/i.test(symbol)) {
     return NextResponse.json({ error: "Invalid symbol format" }, { status: 400 });
   }
 
